@@ -2,6 +2,7 @@ import json
 import re
 from typing import Any
 from ai.utils.llm_client import call_llm
+from ai.constants import ScamType
 from .preprocessor import preprocess_text
 from .prompts import build_analysis_prompt
 
@@ -30,9 +31,8 @@ def analyze_text(text: str) -> dict[str, Any]:
 
 
 def _validate(result: dict) -> dict:
-    """Ensure all required keys exist with correct types. Fill missing ones."""
-    valid_scam_types = {"ghost_seller", "advance_payment", "fake_product", "wrong_item", "no_response"}
     valid_labels = {"scam", "legit", "unknown"}
+    valid_scam_types = set(ScamType._value2member_map_.keys())  # from enum, single source
 
     return {
         "label": result.get("label") if result.get("label") in valid_labels else "unknown",

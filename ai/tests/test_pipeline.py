@@ -141,6 +141,37 @@ def test_backend_never_crashes():
             raise AssertionError(f"Function crashed on input: {name}") from e
 
     print("  ALL PASS")
+    
+
+def test_backend_report_submission():
+    """
+    Simulates POST /api/reports/
+    Backend receives: scam_type + description + uploaded screenshot file
+    Backend does: save temp file → assess_report_credibility() → delete temp → store in DB
+    """
+    print("\n=== test_backend_report_submission ===")
+
+    from ai import assess_report_credibility
+    from ai.constants import ScamType
+
+    # Simulate what backend does after Cloudinary upload
+    scam_type = ScamType.ADVANCE_PAYMENT.value
+    description = "طلب مني نحول على البريدي موب قبل ما يبعث البضاعة، حولت وما جاتش"
+    temp_path = "ai/tests/sample_screenshot.png"  # backend saves UploadFile here
+
+    result = assess_report_credibility(scam_type, description, temp_path)
+    # backend would os.unlink(temp_path) here
+
+    print(f"  credibility_score : {result['credibility_score']}")
+    print(f"  credibility_label : {result['credibility_label']}")
+    print(f"  reason            : {result['reason']}")
+    print(f"  screenshot_support: {result['screenshot_supports_claim']}")
+
+    assert 0.0 <= result["credibility_score"] <= 1.0
+    assert result["credibility_label"] in ("high", "medium", "low")
+    assert isinstance(result["reason"], str)
+    assert len(result["reason"]) > 0
+    print("  PASS")
 
 
 if __name__ == "__main__":
@@ -149,4 +180,5 @@ if __name__ == "__main__":
     test_backend_screenshot_endpoint_single()
     test_backend_screenshot_endpoint_multi()
     test_backend_never_crashes()
+    test_backend_report_submission()
     print("\n=== ALL PIPELINE TESTS PASSED ===")
