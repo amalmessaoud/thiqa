@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Make the ai/ package importable from the project root
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import auth, search, analyze, reports, reviews, blacklist
