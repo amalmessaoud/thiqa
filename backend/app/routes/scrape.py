@@ -72,6 +72,14 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/usage")
+async def usage():
+    data = await get_apify_usage(APIFY_API_KEY)
+    if not data:
+        raise HTTPException(400, "Invalid Apify API key")
+    return data
+
+
 @router.get("/history", response_model=list[HistoryItem])
 def get_history(limit: int = 20, db: Session = Depends(get_db)):
     records = crud.get_history(db, limit)
