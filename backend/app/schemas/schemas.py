@@ -1,9 +1,6 @@
-<<<<<<< Updated upstream
-=======
 from pydantic import BaseModel, field_validator, EmailStr
-from typing import Optional
+from typing import Optional, Any
 import uuid
-from typing import Any  
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
@@ -18,23 +15,19 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must be at least 6 characters")
         return v
 
-
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-
 
 class AuthResponse(BaseModel):
     user_id: str
     token: str
     email: str
 
-
 class MeResponse(BaseModel):
     id: str
     email: str
     created_at: str
-
 
 # ── Analyze: Text ──────────────────────────────────────────────────────────────
 
@@ -48,14 +41,12 @@ class TextAnalyzeRequest(BaseModel):
             raise ValueError("text must not be empty")
         return v.strip()
 
-
 class TextAnalyzeResponse(BaseModel):
     label: str
     scam_type: Optional[str]
     red_flags: list[str]
     verdict_darija: str
     safe_to_proceed: bool
-
 
 # ── Analyze: Screenshot ────────────────────────────────────────────────────────
 
@@ -67,7 +58,6 @@ class ScreenshotAnalyzeResponse(BaseModel):
     images_processed: int
     images_failed: int
     analysis: Optional[TextAnalyzeResponse]
-
 
 # ── Reports ────────────────────────────────────────────────────────────────────
 
@@ -82,7 +72,6 @@ class ReportResponse(BaseModel):
     reporter_email: str
     created_at: str
 
-
 class ReportSubmitResponse(BaseModel):
     success: bool
     report_id: str
@@ -90,34 +79,25 @@ class ReportSubmitResponse(BaseModel):
     credibility_label: Optional[str]
     message: str
 
-
 class ReportsListResponse(BaseModel):
     reports: list[ReportResponse]
 
-
-
-
-
-
-
 # ── Scraping ──────────────────────────────────────────────────────────────────
- 
+
 class AnalyzeRequest(BaseModel):
     url: str
- 
- 
-class AnalyzeResponse(BaseModel):         # returned by POST /analyze in main.py
-    id: str                               # UUID string, matches SellerProfile.id
+
+class AnalyzeResponse(BaseModel):
+    id: str
     platform: str
     url: str
     data: Any
     created_at: str
- 
+
     class Config:
         from_attributes = True
- 
- 
-class HistoryItem(BaseModel):             # returned by GET /history in main.py
+
+class HistoryItem(BaseModel):
     id: str
     url: str
     platform: str
@@ -125,8 +105,6 @@ class HistoryItem(BaseModel):             # returned by GET /history in main.py
     title: Optional[str]
     followers: Optional[int]
     created_at: str
- 
+
     class Config:
         from_attributes = True
- 
->>>>>>> Stashed changes

@@ -11,13 +11,9 @@ DATABASE_URL = (
 )
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 FACEBOOK_ACCESS_TOKEN = os.getenv("FACEBOOK_ACCESS_TOKEN")
-<<<<<<< Updated upstream
-CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
-=======
 CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
 APIFY_API_KEY = os.getenv("APIFY_API_KEY", "")
 
 # JWT
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days — long enough for hackathon
->>>>>>> Stashed changes
+JWT_EXPIRE_MINUTES = 60 * 24 * 7
