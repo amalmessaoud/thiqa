@@ -8,6 +8,7 @@ import enum
 class Platform(str, enum.Enum):
     facebook = "facebook"
     instagram = "instagram"
+    tiktok = "tiktok"
 
 class ContactType(str, enum.Enum):
     phone = "phone"
