@@ -7,7 +7,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 from app.routes import scrape
-from app.routes import ai_features                                          # ← ADD 1
+from app.routes import ai_features  
+from app.routes import buyer_history                                        # ← ADD 1
 
 
 from fastapi import FastAPI
@@ -31,7 +32,9 @@ app.include_router(reports.router,       prefix="/api/reports",   tags=["reports
 app.include_router(reviews.router,       prefix="/api/reviews",   tags=["reviews"])
 app.include_router(blacklist.router,     prefix="/api/blacklist", tags=["blacklist"])
 app.include_router(scrape.router,        prefix="/api/scrape",    tags=["scrape"])
-app.include_router(ai_features.router,   prefix="/api/ai",        tags=["ai"])     # ← ADD 2
+app.include_router(ai_features.router,   prefix="/api/ai",        tags=["ai"])  
+app.include_router(buyer_history.router, prefix="/api/history",   tags=["history"])
+
 
 @app.get("/debug/step")
 def debug_step():

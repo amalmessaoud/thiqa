@@ -1,32 +1,163 @@
-from fastapi import APIRouter
+import uuid
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, field_validator
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.models.models import Review, SellerProfile, User, Platform
+from app.routes.auth import get_current_user
 
 router = APIRouter()
 
-@router.post("/")
-def submit_review(body: dict):
-    """STATUS: STUB"""
-    return {
-        "success": True,
-        "review_id": "stub-review-id-001"
-    }
 
-@router.get("/")
-def get_reviews(seller_id: str):
-    """STATUS: STUB"""
-    return {
-        "reviews": [
-            {
-                "id": "stub-review-id-001",
-                "seller_id": seller_id,
-                "stars": 4,
-                "product_matched": True,
-                "responded_fast": True,
-                "item_received": True,
-                "would_buy_again": True,
-                "comment": "تعامل مليح",
-                "reviewer_email": "user@example.com",
-                "created_at": "2026-03-19T00:00:00Z"
-            }
-        ],
-        "avg_stars": 4.0
-    }
+# ── Schemas (inline — add to schemas.py if you prefer) ───────────────────────
+
+class ReviewSubmitRequest(BaseModel):
+    profile_url: str
+    stars: int
+    comment: Optional[str] = None
+    product_matched: Optional[bool] = None   # الصورة مطابقة للسلعة
+    responded_fast: Optional[bool] = None    # رد بسرعة
+    item_received: Optional[bool] = None     # وصلتني السلعة
+    would_buy_again: Optional[bool] = None   # نعاود نشري منه
+
+    @field_validator("stars")
+    @classmethod
+    def stars_range(cls, v: int) -> int:
+        if not (1 <= v <= 5):
+            raise ValueError("stars must be between 1 and 5")
+        return v
+
+    @field_validator("profile_url")
+    @classmethod
+    def url_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("profile_url must not be empty")
+        return v.strip()
+
+
+class ReviewResponse(BaseModel):
+    id: str
+    seller_id: str
+    stars: int
+    comment: Optional[str]
+    product_matched: Optional[bool]
+    responded_fast: Optional[bool]
+    item_received: Optional[bool]
+    would_buy_again: Optional[bool]
+    reviewer_email: str
+    created_at: str
+
+
+class ReviewSubmitResponse(BaseModel):
+    success: bool
+    review_id: str
+    message: str
+
+
+class ReviewsListResponse(BaseModel):
+    reviews: list[ReviewResponse]
+    avg_stars: Optional[float]
+    total: int
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _detect_platform(profile_url: str) -> Platform:
+    if "instagram.com" in profile_url:
+        return Platform.instagram
+    return Platform.facebook
+
+
+def _upsert_seller(db: Session, profile_url: str) -> SellerProfile:
+    seller = db.query(SellerProfile).filter(
+        SellerProfile.profile_url == profile_url
+    ).first()
+
+    if not seller:
+        seller = SellerProfile(
+            profile_url=profile_url,
+            platform=_detect_platform(profile_url),
+        )
+        db.add(seller)
+        db.commit()
+        db.refresh(seller)
+
+    return seller
+
+
+# ── POST /api/reviews/ ────────────────────────────────────────────────────────
+
+@router.post("/", response_model=ReviewSubmitResponse)
+def submit_review(
+    body: ReviewSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),   # auth required
+):
+    seller = _upsert_seller(db, body.profile_url)
+
+    review = Review(
+        seller_id=seller.id,
+        reviewer_id=current_user.id,
+        stars=body.stars,
+        comment=body.comment,
+        product_matched=body.product_matched,
+        responded_fast=body.responded_fast,
+        item_received=body.item_received,
+        would_buy_again=body.would_buy_again,
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+
+    return ReviewSubmitResponse(
+        success=True,
+        review_id=str(review.id),
+        message="تم تسجيل تقييمك بنجاح",
+    )
+
+
+# ── GET /api/reviews/?seller_id= ─────────────────────────────────────────────
+
+@router.get("/", response_model=ReviewsListResponse)
+def get_reviews(seller_id: str, db: Session = Depends(get_db)):
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid seller_id format")
+
+    reviews = (
+        db.query(Review)
+        .filter(Review.seller_id == seller_uuid)
+        .order_by(Review.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for r in reviews:
+        reviewer = db.query(User).filter(User.id == r.reviewer_id).first()
+        result.append(ReviewResponse(
+            id=str(r.id),
+            seller_id=str(r.seller_id),
+            stars=r.stars,
+            comment=r.comment,
+            product_matched=r.product_matched,
+            responded_fast=r.responded_fast,
+            item_received=r.item_received,
+            would_buy_again=r.would_buy_again,
+            reviewer_email=reviewer.email if reviewer else "unknown",
+            created_at=r.created_at.isoformat(),
+        ))
+
+    avg_stars = (
+        round(sum(r.stars for r in reviews) / len(reviews), 2)
+        if reviews else None
+    )
+
+    return ReviewsListResponse(
+        reviews=result,
+        avg_stars=avg_stars,
+        total=len(result),
+    )
