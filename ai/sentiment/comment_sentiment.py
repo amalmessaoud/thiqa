@@ -6,8 +6,8 @@
 # Pipeline:
 #   1. Input: ScrapeResult — profile_url, post_url, raw comments (list[Comment])
 #   2. Classification:
-#      - If fine-tuned weights exist at ai/models/arabert_sentiment/, AraBERT
-#        (aubmindlab/bert-base-arabertv02) is loaded with those weights.
+#      - If fine-tuned weights exist at models/marbert_algerian/, MARBERT
+#        (UBC-NLP/MARBERTv2) is loaded with those weights.
 #      - Fallback: CAMeL-Lab/bert-base-arabic-camelbert-da-sentiment
 #        (dialect-aware Arabic sentiment, handles Darija well)
 #   3. Aggregates counts → percentages.
@@ -50,10 +50,10 @@ logger = logging.getLogger(__name__)
 class Comment:
     """A single scraped comment."""
     text: str
-    author: Optional[str] = None          # username / display name
-    timestamp: Optional[str] = None       # ISO-8601 or raw platform string
-    likes: int = 0                        # reaction count (if available)
-    is_reply: bool = False                # True if it's a reply to another comment
+    author: Optional[str] = None
+    timestamp: Optional[str] = None
+    likes: int = 0
+    is_reply: bool = False
 
 
 @dataclass
@@ -77,9 +77,9 @@ class ScrapeResult:
     profile_url: str
     post_url: str
     comments: list[Comment]
-    platform: str = "unknown"           # facebook | instagram | tiktok | …
-    post_text: Optional[str] = None     # caption / post body (optional context)
-    post_id: Optional[str] = None       # platform post ID if scraped
+    platform: str = "unknown"
+    post_text: Optional[str] = None
+    post_id: Optional[str] = None
 
 
 @dataclass
@@ -89,66 +89,49 @@ class SentimentResult:
     post_url: str
     platform: str
 
-    # Percentages (sum to 100)
     positive_pct: float
     negative_pct: float
     neutral_pct: float
     irrelevant_pct: float
 
-    total_comments: int      # raw count incl. irrelevant
-    total_analyzed: int      # relevant comments that went through classifier
+    total_comments: int
+    total_analyzed: int
 
-    # LLM outputs
     summary: str
     top_positive: list[str]
     top_negative: list[str]
 
-    # Per-comment breakdown (for downstream use / debugging)
     labeled: list[dict] = field(default_factory=list)
-    # [{"text": ..., "author": ..., "label": "positive"|"negative"|"neutral"|"irrelevant"}]
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 _FINETUNED_WEIGHTS_PATH = os.path.join(
-    os.path.dirname(__file__), "../../models/arabert_sentiment"
+    os.path.dirname(__file__), "../../models/marbert_final"
 )
 
-_ARABERT_MODEL  = "aubmindlab/bert-base-arabertv02"
+_MARBERT_MODEL  = "UBC-NLP/MARBERTv2"
 _FALLBACK_MODEL = "CAMeL-Lab/bert-base-arabic-camelbert-da-sentiment"
 
-# Minimum characters for a comment to be considered meaningful
-_MIN_MEANINGFUL_CHARS = 5
+_MIN_MEANINGFUL_CHARS = 4
+_MAX_COMMENT_CHARS    = 400
+_CONFIDENCE_THRESHOLD = 0.50   # below this → "neutral"
+_BATCH_SIZE           = 32
 
-# Comments longer than this will be truncated by the model — log a warning
-_MAX_COMMENT_CHARS = 400
-
-# Minimum confidence score to trust a label — below this → "neutral"
-_CONFIDENCE_THRESHOLD = 0.60
-
-# Batch size — CAMeL is a base model, safe to use larger batches
-_BATCH_SIZE = 32
-
-# LLM retry settings
 _LLM_MAX_RETRIES = 3
-_LLM_RETRY_DELAY = 2.0   # seconds between retries
+_LLM_RETRY_DELAY = 2.0
 
 
 # ── Label maps ────────────────────────────────────────────────────────────────
 
-_LABEL_MAP_FINETUNED: dict[str, str] = {
+# MARBERT fine-tuned: binary model trained with 0=negative, 1=positive
+# HuggingFace pipeline outputs LABEL_0 / LABEL_1
+_LABEL_MAP_MARBERT: dict[str, str] = {
     "LABEL_0": "negative",
-    "LABEL_1": "neutral",
-    "LABEL_2": "positive",
-    "negative": "negative",
-    "neutral":  "neutral",
-    "positive": "positive",
-    "NEGATIVE": "negative",
-    "NEUTRAL":  "neutral",
-    "POSITIVE": "positive",
+    "LABEL_1": "positive",
 }
 
-# CAMeL model outputs: positive / negative / neutral (case-insensitive)
+# CAMeL fallback: 3-class model with named labels
 _CAMEL_LABEL_MAP: dict[str, str] = {
     "positive": "positive",
     "negative": "negative",
@@ -156,45 +139,32 @@ _CAMEL_LABEL_MAP: dict[str, str] = {
     "POSITIVE": "positive",
     "NEGATIVE": "negative",
     "NEUTRAL":  "neutral",
-    "POS": "positive",
-    "NEG": "negative",
-    "NEU": "neutral",
+    "POS":      "positive",
+    "NEG":      "negative",
+    "NEU":      "neutral",
 }
 
 
 # ── Model loading (lazy, thread-safe, loaded once) ────────────────────────────
 
-_classifier   = None
-_preprocessor = None
-_lock         = threading.Lock()
+_classifier = None
+_lock       = threading.Lock()
 
 
 def _get_classifier():
-    global _classifier, _preprocessor
+    global _classifier
 
-    # Fast path — already loaded
     if _classifier is not None:
         return _classifier
 
     with _lock:
-        # Double-checked locking — another thread may have loaded it while
-        # we were waiting for the lock
         if _classifier is not None:
             return _classifier
 
         device = 0 if torch.cuda.is_available() else -1
 
         if os.path.isdir(_FINETUNED_WEIGHTS_PATH):
-            # ── Fine-tuned AraBERT weights ────────────────────────────────────
-            logger.info("Loading fine-tuned weights from %s", _FINETUNED_WEIGHTS_PATH)
-
-            try:
-                from arabert.preprocess import ArabertPreprocessor
-                _preprocessor = ArabertPreprocessor(model_name=_ARABERT_MODEL)
-                logger.info("AraBERT preprocessor initialised.")
-            except ImportError:
-                logger.warning("arabert package not installed — skipping preprocessing.")
-                _preprocessor = None
+            logger.info("Loading fine-tuned MARBERT weights from %s", _FINETUNED_WEIGHTS_PATH)
 
             tokenizer = AutoTokenizer.from_pretrained(_FINETUNED_WEIGHTS_PATH)
             model     = AutoModelForSequenceClassification.from_pretrained(
@@ -211,9 +181,8 @@ def _get_classifier():
             )
 
         else:
-            # ── CAMeL dialect sentiment fallback ──────────────────────────────
             logger.info(
-                "Fine-tuned weights not found. Loading CAMeL dialect sentiment: %s",
+                "Fine-tuned weights not found. Loading CAMeL fallback: %s",
                 _FALLBACK_MODEL,
             )
             _classifier = pipeline(
@@ -231,49 +200,49 @@ def _is_finetuned() -> bool:
     return os.path.isdir(_FINETUNED_WEIGHTS_PATH)
 
 
-# ── Comment pre-processing ────────────────────────────────────────────────────
+# ── Comment filtering ─────────────────────────────────────────────────────────
+
+# Short Darija words that carry real sentiment — don't filter them out
+_DARIJA_SENTIMENT_WORDS = {
+    "مزيان", "زوين", "بركاتك", "شكرا", "نصاب", "كذاب",
+    "ممتاز", "نعم", "لا", "باهي", "مليح", "خايب", "برك",
+}
 
 def _is_irrelevant(text: str) -> bool:
     """
-    True for:
-      - very short texts (< _MIN_MEANINGFUL_CHARS non-whitespace chars)
-      - strings that contain NO Arabic or Latin letters at all
-        (pure emoji / punctuation / digit strings)
-
-    Deliberately lenient: a comment with even one real word is kept.
+    Filters out:
+      - pure emoji / punctuation / digit strings (no real letters)
+      - very short strings under _MIN_MEANINGFUL_CHARS
+      - bare URLs
+    Keeps short but meaningful Darija sentiment words.
     """
     stripped = text.strip()
+
+    # Allowlist — short but meaningful Darija
+    if stripped in _DARIJA_SENTIMENT_WORDS:
+        return False
 
     if len(stripped) < _MIN_MEANINGFUL_CHARS:
         return True
 
+    # Pure URL
+    if re.fullmatch(r'https?://\S+', stripped):
+        return True
+
     has_arabic = bool(re.search(r'[\u0600-\u06FF]', stripped))
     has_latin  = bool(re.search(r'[a-zA-Z]', stripped))
-    if has_arabic or has_latin:
-        return False
 
-    return True
+    # No real letters at all → emoji/punctuation/digits only
+    if not has_arabic and not has_latin:
+        return True
 
-
-def _preprocess_for_arabert(text: str) -> str:
-    """
-    Apply AraBERT normalisation ONLY when fine-tuned weights are loaded.
-    Falls back to raw text on error.
-    """
-    if _preprocessor is None:
-        return text
-    try:
-        return _preprocessor.preprocess(text)
-    except Exception as exc:
-        logger.debug("AraBERT preprocessor error on %r: %s", text[:40], exc)
-        return text
+    return False
 
 
 def _guard_length(text: str) -> str:
-    """Warn and return text as-is if it will be truncated by the model."""
     if len(text) > _MAX_COMMENT_CHARS:
         logger.debug(
-            "Long comment (%d chars) will be truncated by model: %r…",
+            "Long comment (%d chars) will be truncated: %r…",
             len(text), text[:40],
         )
     return text
@@ -283,34 +252,36 @@ def _guard_length(text: str) -> str:
 
 def _classify_batch(texts: list[str]) -> list[str]:
     """
-    Returns a list of labels ("positive" | "negative" | "neutral")
-    parallel to `texts`.
+    Returns labels ("positive" | "negative" | "neutral") parallel to texts.
 
-    - Fine-tuned path : applies AraBERT preprocessing → text-classification.
-    - Fallback path   : feeds raw text to CAMeL → text-classification.
-    - Low-confidence predictions (score < _CONFIDENCE_THRESHOLD) → "neutral".
+    Fine-tuned MARBERT path:
+      - Binary model: LABEL_0=negative, LABEL_1=positive
+      - No AraBERT preprocessing (MARBERT does not need it)
+      - score < _CONFIDENCE_THRESHOLD → "neutral"
+
+    CAMeL fallback path:
+      - 3-class model with named labels
+      - score < _CONFIDENCE_THRESHOLD → "neutral"
     """
     if not texts:
         return []
 
-    clf = _get_classifier()
-
-    # Warn on long comments before they hit the model
+    clf   = _get_classifier()
     texts = [_guard_length(t) for t in texts]
 
     try:
+        results = clf(texts, batch_size=_BATCH_SIZE, truncation=True)
+
         if _is_finetuned():
-            preprocessed = [_preprocess_for_arabert(t) for t in texts]
-            results = clf(preprocessed, batch_size=_BATCH_SIZE, truncation=True)
+            # MARBERT binary — LABEL_0=negative, LABEL_1=positive
             return [
-                _LABEL_MAP_FINETUNED.get(r["label"], "neutral")
+                _LABEL_MAP_MARBERT.get(r["label"], "neutral")
                 if r["score"] >= _CONFIDENCE_THRESHOLD
                 else "neutral"
                 for r in results
             ]
         else:
-            # CAMeL handles Arabic/Darija natively — no preprocessing needed
-            results = clf(texts, batch_size=_BATCH_SIZE, truncation=True)
+            # CAMeL 3-class fallback
             return [
                 _CAMEL_LABEL_MAP.get(r["label"], "neutral")
                 if r["score"] >= _CONFIDENCE_THRESHOLD
@@ -330,14 +301,21 @@ def _build_summary_prompt(
     label_pairs: list[tuple[Comment, str]],
     counts: Counter,
     total: int,
-    pos_pct: float,   # ✅ use the already-rounded safe percentages
+    pos_pct: float,
     neg_pct: float,
 ) -> str:
-    pos_examples = [c.text for c, l in label_pairs if l == "positive"][:5]
-    neg_examples = [c.text for c, l in label_pairs if l == "negative"][:5]
+    # Sort by likes so LLM sees the most-seen comments first
+    pos_examples = sorted(
+        [c for c, l in label_pairs if l == "positive"],
+        key=lambda c: c.likes, reverse=True
+    )[:5]
+    neg_examples = sorted(
+        [c for c, l in label_pairs if l == "negative"],
+        key=lambda c: c.likes, reverse=True
+    )[:5]
 
-    pos_list = "\n".join(f"- {t}" for t in pos_examples) or "لا يوجد"
-    neg_list = "\n".join(f"- {t}" for t in neg_examples) or "لا يوجد"
+    pos_list = "\n".join(f"- {c.text}" for c in pos_examples) or "لا يوجد"
+    neg_list = "\n".join(f"- {c.text}" for c in neg_examples) or "لا يوجد"
 
     platform_line = (
         f"المنصة: {scrape.platform}\n"
@@ -364,7 +342,8 @@ def _build_summary_prompt(
 
 مهمتك:
 1. اكتب ملخصاً بالدارجة الجزائرية (2-3 جمل) يوضح المشاعر العامة للمشترين.
-2. اختر أفضل 3 تعليقات إيجابية و3 سلبية ممثلة من القائمة أعلاه فقط.
+2. اكتب بالدارجة العامية الجزائرية مع إمكانية خلط بعض الكلمات الفرنسية كما يتحدث الجزائريون. لا تكتب بالفصحى.
+3. اختر أفضل 3 تعليقات إيجابية و3 سلبية ممثلة من القائمة أعلاه فقط.
 
 أعط JSON فقط بدون ```json أو أي نص إضافي:
 {{
@@ -375,7 +354,6 @@ def _build_summary_prompt(
 
 
 def _parse_llm_json(raw: str) -> dict:
-    """Robust JSON extraction from LLM output."""
     cleaned = re.sub(r"```(?:json)?", "", raw).strip()
     try:
         return json.loads(cleaned)
@@ -395,10 +373,6 @@ def _parse_llm_json(raw: str) -> dict:
 
 
 def _call_llm_with_retry(prompt: str) -> dict:
-    """
-    Calls call_llm() with up to _LLM_MAX_RETRIES attempts.
-    Returns parsed JSON dict or a safe fallback on total failure.
-    """
     last_exc: Optional[Exception] = None
 
     for attempt in range(1, _LLM_MAX_RETRIES + 1):
@@ -427,11 +401,6 @@ def _call_llm_with_retry(prompt: str) -> dict:
 def _safe_percentages(
     counts: Counter, n_irrelevant: int, total: int
 ) -> tuple[float, float, float, float]:
-    """
-    Returns (positive_pct, negative_pct, neutral_pct, irrelevant_pct)
-    guaranteed to sum to exactly 100.0.
-    Distributes any rounding remainder into neutral_pct.
-    """
     if total == 0:
         return 0.0, 0.0, 0.0, 0.0
 
@@ -457,36 +426,17 @@ def analyze_sentiment(scrape: ScrapeResult) -> SentimentResult:
     ----------
     scrape : ScrapeResult
         Full scraping output: profile URL, post URL, and list of Comment objects.
-        Accepts Arabic, Darija, French, or any mix.
+        Accepts Arabic, Darija, French, Arabizi, or any mix.
 
     Returns
     -------
     SentimentResult
         Structured result with percentages, summary, top comments,
         per-comment labels, and the original profile / post URLs.
-
-    Example
-    -------
-    from ai.sentiment.comment_sentiment import analyze_sentiment, ScrapeResult, Comment
-
-    result = analyze_sentiment(ScrapeResult(
-        profile_url="https://www.facebook.com/seller",
-        post_url="https://www.facebook.com/seller/posts/99",
-        platform="facebook",
-        post_text="سولد 🔥 ملابس شتوية",
-        comments=[
-            Comment(text="توصلت بضاعة نيشان"),
-            Comment(text="نصابين ما وصلتليش"),
-            Comment(text="👍👍👍"),
-        ],
-    ))
-    print(result.summary)
     """
-    # ── Normalise input ───────────────────────────────────────────────────────
     comments = [c for c in scrape.comments if c.text and c.text.strip()]
-    total = len(comments)
+    total    = len(comments)
 
-    # ✅ total_comments now reflects actual count, not hardcoded 0
     _empty = SentimentResult(
         profile_url=scrape.profile_url,
         post_url=scrape.post_url,
@@ -506,7 +456,6 @@ def analyze_sentiment(scrape: ScrapeResult) -> SentimentResult:
     if not comments:
         return _empty
 
-    # ── Step 1: Split relevant vs irrelevant ──────────────────────────────────
     relevant   = [c for c in comments if not _is_irrelevant(c.text)]
     irrelevant = [c for c in comments if _is_irrelevant(c.text)]
 
@@ -515,7 +464,6 @@ def analyze_sentiment(scrape: ScrapeResult) -> SentimentResult:
         scrape.post_url, total, len(relevant), len(irrelevant),
     )
 
-    # ── Step 2: Classification ────────────────────────────────────────────────
     label_pairs: list[tuple[Comment, str]] = []
 
     if relevant:
@@ -525,12 +473,10 @@ def analyze_sentiment(scrape: ScrapeResult) -> SentimentResult:
 
     counts = Counter(l for _, l in label_pairs)
 
-    # ── Step 3: Compute percentages ───────────────────────────────────────────
     pos_pct, neg_pct, neu_pct, irr_pct = _safe_percentages(
         counts, len(irrelevant), total
     )
 
-    # ── Step 4: Build labeled breakdown ──────────────────────────────────────
     labeled: list[dict] = [
         {
             "text":      c.text,
@@ -553,8 +499,6 @@ def analyze_sentiment(scrape: ScrapeResult) -> SentimentResult:
         for c in irrelevant
     ]
 
-    # ── Step 5: Groq LLaMA summary (with retry) ───────────────────────────────
-    # ✅ Pass already-computed safe percentages so prompt matches returned result
     prompt = _build_summary_prompt(
         scrape, label_pairs, counts, total, pos_pct, neg_pct
     )
