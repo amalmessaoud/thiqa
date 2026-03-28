@@ -1,8 +1,14 @@
 import sys
 import os
-from app.routes import scrape
 
+# Must be BEFORE any local imports that depend on the 'ai' package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+from app.routes import scrape
+from app.routes import ai_features                                          # ← ADD 1
+
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,13 +24,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router,      prefix="/api/auth",      tags=["auth"])
-app.include_router(search.router,    prefix="/api",           tags=["search"])
-app.include_router(analyze.router,   prefix="/api/analyze",   tags=["analyze"])
-app.include_router(reports.router,   prefix="/api/reports",   tags=["reports"])
-app.include_router(reviews.router,   prefix="/api/reviews",   tags=["reviews"])
-app.include_router(blacklist.router, prefix="/api/blacklist", tags=["blacklist"])
-app.include_router(scrape.router,    prefix="/api/scrape",    tags=["scrape"])
+app.include_router(auth.router,          prefix="/api/auth",      tags=["auth"])
+app.include_router(search.router,        prefix="/api",           tags=["search"])
+app.include_router(analyze.router,       prefix="/api/analyze",   tags=["analyze"])
+app.include_router(reports.router,       prefix="/api/reports",   tags=["reports"])
+app.include_router(reviews.router,       prefix="/api/reviews",   tags=["reviews"])
+app.include_router(blacklist.router,     prefix="/api/blacklist", tags=["blacklist"])
+app.include_router(scrape.router,        prefix="/api/scrape",    tags=["scrape"])
+app.include_router(ai_features.router,   prefix="/api/ai",        tags=["ai"])     # ← ADD 2
 
 @app.get("/debug/step")
 def debug_step():

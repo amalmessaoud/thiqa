@@ -108,3 +108,60 @@ class HistoryItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+
+# ── Feedback Summary (Part 1) ─────────────────────────────────────────────────
+ 
+class FeedbackSummaryRequest(BaseModel):
+    seller_id: str
+    # Optional: pass feedbacks directly (for tests). If None, route loads from DB.
+    feedbacks: Optional[list[str]] = None
+ 
+ 
+class FeedbackSummaryResponse(BaseModel):
+    seller_id: str
+    summary: str
+    sentiment_hint: str        # "mostly_positive" | "mixed" | "mostly_negative"
+    language_used: str         # "darija" | "arabic" | "french" | "mixed"
+    total_count: int
+ 
+ 
+# ── AI Image Detector (Part 2) ────────────────────────────────────────────────
+ 
+class ImageAuthenticityResponse(BaseModel):
+    is_ai_generated: bool
+    confidence: float          # 0.0 – 1.0
+    verdict_arabic: str
+    reasons: list[str]
+    safe_to_trust: bool
+ 
+ 
+# ── Sentiment Analysis (Part 3) ───────────────────────────────────────────────
+
+class CommentInput(BaseModel):
+    text: str
+
+class SentimentRequest(BaseModel):
+    profile_url: str
+    post_url: str
+    comments: list[CommentInput]
+
+    @field_validator("comments")
+    @classmethod
+    def must_not_be_empty(cls, v):
+        if not v:
+            raise ValueError("comments list must not be empty")
+        return v
+
+class SentimentResponse(BaseModel):
+    profile_url: str
+    post_url: str
+    positive_pct: float
+    negative_pct: float
+    neutral_pct: float
+    irrelevant_pct: float
+    total_analyzed: int
+    summary: str
+    top_positive: list[str]
+    top_negative: list[str]
