@@ -1,0 +1,253 @@
+/* ── Navbar ── */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 64px;
+  background: #ffffff;
+  border-bottom: 1px solid #B0E4CC;
+}
+
+.navbar-logo img { height: 25px; }
+
+/* Desktop links */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.navbar-links li { list-style: none; }
+
+.nav-link {
+  text-decoration: none;
+  color: #122040;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'Rubik', sans-serif;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.nav-link:hover { color: #1D9E75; }
+.nav-link.active { color: #1D9E75; font-weight: 700; }
+
+/* Desktop action buttons */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-register {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: 1.5px solid #1D9E75;
+  color: #1D9E75;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  background: #fff;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-register:hover { background: #f0fdf8; }
+
+.btn-login {
+  padding: 8px 18px;
+  border-radius: 10px;
+  background: #1D9E75;
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-family: 'Rubik', sans-serif;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-login:hover { background: #178a64; }
+
+.btn-profile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #e8e8e8;
+  background: #f9f9f9;
+  color: #122040;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Rubik', sans-serif;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-profile:hover { background: #f0fdf8; }
+
+.btn-logout {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #e53e3e;
+  color: #e53e3e;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Rubik', sans-serif;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-logout:hover { background: #fff5f5; }
+
+/* Full-width variants used inside sidebar */
+.full {
+  width: 100%;
+  justify-content: center;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+/* Hamburger — hidden on desktop */
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #122040;
+  padding: 4px;
+  line-height: 1;
+}
+
+/* ── Overlay ── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+}
+
+.sidebar-overlay.visible { display: block; }
+
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed;
+  top: 0;
+  right: -320px;
+  width: 280px;
+  height: 100vh;
+  background: #ffffff;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.12);
+  transition: right 0.28s cubic-bezier(.4,0,.2,1);
+}
+
+.sidebar.open { right: 0; }
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
+}
+
+.sidebar-logo { height: 30px; }
+
+.sidebar-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #122040;
+  padding: 4px;
+  line-height: 1;
+}
+
+.sidebar-nav {
+  list-style: none;
+  margin: 0;
+  padding: 12px 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-nav li { list-style: none; }
+
+.sidebar-nav .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 20px;
+  font-size: 15px;
+  border-bottom: 1px solid #f5f5f5;
+  width: 100%;
+  text-align: right;
+}
+
+.sidebar-nav .nav-link:hover {
+  background: #f0fdf8;
+  color: #1D9E75;
+}
+
+.sidebar-nav .nav-link.active {
+  background: #f0fdf8;
+  color: #1D9E75;
+  font-weight: 700;
+}
+
+.sidebar-icon {
+  display: flex;
+  align-items: center;
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Responsive breakpoint ── */
+@media (max-width: 900px) {
+  .navbar-links,
+  .navbar-actions {
+    display: none;
+  }
+
+  .hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .navbar {
+    padding: 0 20px;
+  }
+}

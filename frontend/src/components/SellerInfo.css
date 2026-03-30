@@ -1,0 +1,39 @@
+.seller-info-card {
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.seller-info-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #122040;
+  text-align: right;
+  margin-bottom: 14px;
+}
+
+.seller-info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seller-info-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #333;
+  direction: rtl;
+}
+
+.seller-info-row a {
+  color: #1D9E75;
+  text-decoration: none;
+}
+
+.seller-info-icon {
+  color: #888;
+}
