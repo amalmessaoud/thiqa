@@ -6,6 +6,8 @@ from ai.scoring.trust_score import calculate_trust_score
 from ai.credibility.report_credibility import assess_report_credibility
 from ai.feedback.summarizer import summarize_feedbacks
 from ai.sentiment.comment_sentiment import analyze_sentiment
+from ai.scoring.seller_verdict import generate_seller_verdict
+
 
 # ── Phase 2: Risk & Category ──────────────────────────────────────────────────
 from ai.scoring.risk_classifier import classify_seller_risk
