@@ -14,7 +14,8 @@
 # ---------------------------------------------------------------------------
 
 from sqlalchemy.orm import Session
-from app.models.models import SellerProfile, Platform
+from app.models.models import SellerProfile, Platform, Report
+
 import uuid
 
 
@@ -92,3 +93,41 @@ def delete_record(db: Session, record_id) -> None:
     if record:
         db.delete(record)
         db.commit()
+        
+        
+# ── get_trusted_sellers_by_category ──────────────────────────────────────────
+# Returns up to `limit` sellers in the same category as the reported seller,
+# excluding the reported seller itself, ordered by fewest reports first.
+
+from sqlalchemy import func as sa_func
+
+def get_trusted_sellers_by_category(
+    db: Session,
+    category: str,
+    exclude_seller_id: uuid.UUID,
+    limit: int = 3,
+) -> list[SellerProfile]:
+    # Subquery: count reports per seller
+    report_counts = (
+        db.query(
+            Report.seller_id,
+            sa_func.count(Report.id).label("report_count"),
+        )
+        .group_by(Report.seller_id)
+        .subquery()
+    )
+
+    results = (
+        db.query(SellerProfile)
+        .outerjoin(report_counts, SellerProfile.id == report_counts.c.seller_id)
+        .filter(
+            SellerProfile.category == category,
+            SellerProfile.id != exclude_seller_id,
+        )
+        .order_by(
+            sa_func.coalesce(report_counts.c.report_count, 0).asc()
+        )
+        .limit(limit)
+        .all()
+    )
+    return results

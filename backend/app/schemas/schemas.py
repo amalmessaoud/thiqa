@@ -201,3 +201,24 @@ class SellerCategoryRequest(BaseModel):
 
 class SellerCategoryResponse(BaseModel):
     category: str
+    
+    
+# ── Trusted Seller Recommender ────────────────────────────────────────────────
+
+class TrustedSellerItem(BaseModel):
+    id:           str
+    display_name: Optional[str]
+    profile_url:  str
+    platform:     str
+    category:     Optional[str]
+
+    class Config:
+        from_attributes = True
+
+class ReportSubmitWithRecommendationsResponse(BaseModel):
+    success:          bool
+    report_id:        str
+    credibility_score: Optional[float]
+    credibility_label: Optional[str]
+    message:          str
+    recommendations:  list[TrustedSellerItem]

@@ -8,10 +8,17 @@ from typing import Optional
 
 from app.db.database import get_db
 from app.models.models import Report, SellerProfile, SellerContact, User, Platform, ScamType
-from app.schemas.schemas import ReportSubmitResponse, ReportsListResponse, ReportResponse
+from app.schemas.schemas import (
+    ReportSubmitResponse,
+    ReportsListResponse,
+    ReportResponse,
+    TrustedSellerItem,
+    ReportSubmitWithRecommendationsResponse,
+)
 from app.services.cloudinary_service import upload_screenshot
 from app.routes.auth import get_current_user
-from ai import assess_report_credibility
+from app.db.crud import get_trusted_sellers_by_category
+from ai import assess_report_credibility, classify_seller_category
 
 router = APIRouter()
 
@@ -75,7 +82,7 @@ def _save_contacts(db: Session, seller_id: uuid.UUID, contacts: list[str]):
     db.commit()
 
 
-@router.post("/", response_model=ReportSubmitResponse)
+@router.post("/", response_model=ReportSubmitWithRecommendationsResponse)
 def submit_report(
     profile_url: str = Form(...),
     scam_type: str = Form(...),
@@ -158,14 +165,42 @@ def submit_report(
     db.commit()
     db.refresh(report)
 
-    return ReportSubmitResponse(
+    # ── Classify reported seller's category & fetch recommendations ───────────
+    seller_text = f"{seller.display_name or ''} {profile_url}"
+    category = classify_seller_category(seller_text)
+
+    # Persist category on the seller profile if not already set
+    if not seller.category:
+        seller.category = category
+        db.add(seller)
+        db.commit()
+
+    trusted = get_trusted_sellers_by_category(
+        db,
+        category=category,
+        exclude_seller_id=seller.id,
+        limit=3,
+    )
+
+    recommendations = [
+        TrustedSellerItem(
+            id=str(s.id),
+            display_name=s.display_name,
+            profile_url=s.profile_url,
+            platform=s.platform.value,
+            category=s.category,
+        )
+        for s in trusted
+    ]
+
+    return ReportSubmitWithRecommendationsResponse(
         success=True,
         report_id=str(report.id),
         credibility_score=credibility["credibility_score"],
         credibility_label=credibility["credibility_label"],
         message="تم تسجيل بلاغك بنجاح",
+        recommendations=recommendations,
     )
-
 
 @router.get("/", response_model=ReportsListResponse)
 def get_reports(seller_id: str, db: Session = Depends(get_db)):
