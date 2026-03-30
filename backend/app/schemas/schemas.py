@@ -165,3 +165,39 @@ class SentimentResponse(BaseModel):
     summary: str
     top_positive: list[str]
     top_negative: list[str]
+    
+    
+# ── Risk Classifier ───────────────────────────────────────────────────────────
+
+class SellerRiskRequest(BaseModel):
+    account_age_days:      Optional[float] = None
+    post_count:            Optional[float] = None
+    followers:             Optional[float] = None
+    report_count:          Optional[float] = None
+    avg_credibility_score: Optional[float] = None
+    has_phone_contact:     Optional[int]   = None
+    has_website:           Optional[int]   = None
+    platform_facebook:     Optional[int]   = None
+    platform_instagram:    Optional[int]   = None
+    posts_per_month:       Optional[float] = None
+
+class SellerRiskResponse(BaseModel):
+    risk_category:    str    # "legit" | "suspicious" | "high_risk"
+    risk_probability: float
+    risk_class:       int    # 0 | 1 | 2
+
+
+# ── Category Classifier ───────────────────────────────────────────────────────
+
+class SellerCategoryRequest(BaseModel):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def text_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("text must not be empty")
+        return v.strip()
+
+class SellerCategoryResponse(BaseModel):
+    category: str

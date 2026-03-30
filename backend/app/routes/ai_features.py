@@ -34,6 +34,18 @@ from app.schemas.schemas import (
     ImageAuthenticityResponse,
     SentimentRequest,
     SentimentResponse,
+    SellerRiskRequest,
+    SellerRiskResponse,
+    SellerCategoryRequest,
+    SellerCategoryResponse,
+)
+
+from ai import (
+    summarize_feedbacks,
+    check_image_authenticity,
+    analyze_sentiment,
+    classify_seller_risk,
+    classify_seller_category,
 )
 
 from ai import summarize_feedbacks, check_image_authenticity, analyze_sentiment
@@ -168,3 +180,35 @@ async def sentiment(req: SentimentRequest):
         top_positive=result.top_positive,
         top_negative=result.top_negative,
     )
+    
+
+# ── Risk Classifier ───────────────────────────────────────────────────────────
+
+@router.post("/seller/risk", response_model=SellerRiskResponse)
+def get_seller_risk(body: SellerRiskRequest):
+    """
+    Classify seller risk from account signals.
+    All fields optional — missing ones fall back to safe defaults.
+    """
+    try:
+        result = classify_seller_risk(body.model_dump(exclude_none=True))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Risk classification failed: {str(e)}")
+
+    return SellerRiskResponse(**result)
+
+
+# ── Category Classifier ───────────────────────────────────────────────────────
+
+@router.post("/seller/category", response_model=SellerCategoryResponse)
+def get_seller_category(body: SellerCategoryRequest):
+    """
+    Classify seller into Arabic product category.
+    Pass seller name + bio + post captions concatenated in `text`.
+    """
+    try:
+        category = classify_seller_category(body.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Category classification failed: {str(e)}")
+
+    return SellerCategoryResponse(category=category)
