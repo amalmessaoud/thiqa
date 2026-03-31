@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiAlertTriangle, FiPhone, FiUser, FiLink, FiImage } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
+import { thiqaApi } from "../api/thiqa";
 import PrimaryButton from "../components/PrimaryButton";
 import FormInput from "../components/FormInput";
 
@@ -21,6 +22,9 @@ export default function Report() {
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [description, setDescription] = useState("");
   const [image, setImage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -34,9 +38,36 @@ export default function Report() {
     if (e.target.files[0]) setImage(e.target.files[0]);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!user) { navigate("/auth"); return; }
-    alert("تم إرسال التقرير!");
+    if (!fbLink && !phone && !username) {
+      setError("أدخل معلومة واحدة على الأقل عن البائع"); return;
+    }
+    if (!description) {
+      setError("يرجى وصف المشكلة"); return;
+    }
+    if (!image) {
+      setError("يرجى إرفاق صورة كدليل"); return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await thiqaApi.submitReport({
+        profile_url: fbLink || username || phone,
+        scam_type: selectedTypes.join(", ") || "أخرى",
+        description,
+        screenshot: image,
+        contacts: [
+          phone && { type: "phone", value: phone },
+          username && { type: "username", value: username },
+        ].filter(Boolean),
+      });
+      setSuccess(true);
+    } catch (e) {
+      setError("حدث خطأ أثناء إرسال التقرير، حاول مرة أخرى");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -102,8 +133,17 @@ export default function Report() {
         </label>
       </div>
 
+      {error && <div className="report-error">{error}</div>}
+      {success && (
+        <div className="report-success">
+          ✅ تم إرسال التقرير بنجاح! شكراً على مساهمتك.
+        </div>
+      )}
+
       <div className="report-submit">
-        <PrimaryButton fullWidth onClick={handleSubmit}>إرسال التقرير</PrimaryButton>
+        <PrimaryButton fullWidth onClick={handleSubmit}>
+          {loading ? "جاري الإرسال..." : "إرسال التقرير"}
+        </PrimaryButton>
       </div>
 
       <div className="report-howto">

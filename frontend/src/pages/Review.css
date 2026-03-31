@@ -161,3 +161,52 @@
   .review-card { padding: 20px 16px; }
   .star-btn { font-size: 28px; }
 }
+
+
+.results-loading {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+  font-size: 15px;
+}
+
+.results-error {
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 10px;
+  padding: 14px 18px;
+  color: #e53e3e;
+  font-size: 14px;
+  text-align: right;
+}
+
+.results-not-found {
+  background: #f9f9f9;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  padding: 24px;
+  color: #888;
+  font-size: 15px;
+  text-align: center;
+}
+
+.review-error {
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #e53e3e;
+  text-align: right;
+}
+
+.review-success {
+  background: #f0fdf8;
+  border: 1px solid #B0E4CC;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #1D9E75;
+  font-weight: 600;
+  text-align: right;
+}

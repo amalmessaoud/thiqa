@@ -105,3 +105,10 @@
   .blacklist-page { padding: 24px 16px; }
   .blacklist-card { padding: 16px; }
 }
+
+.blacklist-loading {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+  font-size: 15px;
+}

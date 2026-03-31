@@ -1,5 +1,7 @@
 import "./Blacklist.css";
+import { useState, useEffect } from "react";
 import { FiAlertTriangle } from "react-icons/fi";
+import { thiqaApi } from "../api/thiqa";
 import BlacklistCard from "../components/BlacklistCard";
 
 const MOCK_BLACKLIST = [
@@ -27,6 +29,22 @@ const MOCK_BLACKLIST = [
 ];
 
 export default function Blacklist() {
+  const [blacklist, setBlacklist] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    thiqaApi.getBlacklist()
+      .then((data) => {
+        if (data && data.length > 0) {
+          setBlacklist(data);
+        } else {
+          setBlacklist(MOCK_BLACKLIST);
+        }
+      })
+      .catch(() => setBlacklist(MOCK_BLACKLIST))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <main className="blacklist-page" dir="rtl">
       <div className="blacklist-warning">
@@ -37,17 +55,21 @@ export default function Blacklist() {
         </div>
       </div>
 
-      <div className="blacklist-list">
-        {MOCK_BLACKLIST.map((seller) => (
-          <BlacklistCard
-            key={seller.id}
-            username={seller.username}
-            location={seller.location}
-            score={seller.score}
-            aiSummary={seller.aiSummary}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div className="blacklist-loading">جاري التحميل...</div>
+      ) : (
+        <div className="blacklist-list">
+          {blacklist.map((seller, index) => (
+            <BlacklistCard
+              key={seller.id || index}
+              username={seller.username || seller.display_name}
+              location={seller.location}
+              score={seller.score || seller.trust_score?.score}
+              aiSummary={seller.aiSummary || seller.trust_score?.verdict_narrative}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }

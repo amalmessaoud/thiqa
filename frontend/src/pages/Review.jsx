@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiCheckCircle, FiTrendingUp, FiPackage, FiStar } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
+import { thiqaApi } from "../api/thiqa";
 import PrimaryButton from "../components/PrimaryButton";
 import FormInput from "../components/FormInput";
 
@@ -39,15 +40,33 @@ export default function Review() {
   const [seller, setSeller] = useState("");
   const [rating, setRating] = useState(0);
   const [checked, setChecked] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   function toggleCheck(id) {
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!user) { navigate("/auth"); return; }
-    alert("تم إرسال المراجعة!");
-    navigate("/");
+    if (!seller) { setError("يرجى إدخال معلومات البائع"); return; }
+    if (!rating) { setError("يرجى اختيار تقييم بالنجوم"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      await thiqaApi.submitReview({
+        profile_url: seller,
+        stars: rating,
+        tags: Object.keys(checked).filter((k) => checked[k]),
+      });
+      setSuccess(true);
+      setTimeout(() => navigate("/"), 3000);
+    } catch (e) {
+      setError("حدث خطأ أثناء إرسال المراجعة، حاول مرة أخرى");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -98,8 +117,11 @@ export default function Review() {
           </div>
         </div>
 
+        {error && <div className="review-error">{error}</div>}
+        {success && <div className="review-success">✅ تم إرسال المراجعة بنجاح! شكراً.</div>}
+
         <PrimaryButton fullWidth variant="green" onClick={handleSubmit}>
-          إرسال المراجعة
+          {loading ? "جاري الإرسال..." : "إرسال المراجعة"}
         </PrimaryButton>
       </div>
     </main>

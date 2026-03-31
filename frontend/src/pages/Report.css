@@ -217,3 +217,25 @@
     padding: 18px;
   }
 }
+
+
+.report-error {
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 10px;
+  padding: 14px 18px;
+  color: #e53e3e;
+  font-size: 14px;
+  text-align: right;
+}
+
+.report-success {
+  background: #f0fdf8;
+  border: 1px solid #B0E4CC;
+  border-radius: 10px;
+  padding: 14px 18px;
+  color: #1D9E75;
+  font-size: 14px;
+  text-align: right;
+  font-weight: 600;
+}

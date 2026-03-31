@@ -173,3 +173,14 @@
   .auth-card { padding: 24px 16px; }
   .form-row-two { grid-template-columns: 1fr; }
 }
+
+
+.auth-error {
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #e53e3e;
+  text-align: right;
+}
