@@ -1,234 +1,219 @@
+"""
+app/routes/reports.py
+
+Report submission endpoint.
+Changes vs original:
+  • seller_id replaced by seller_url — caller passes the profile URL instead
+    of an internal UUID.  The seller must already exist in the DB (created by
+    a prior scrape/search).
+  • screenshot uploaded as a real multipart file from the user's PC; the file
+    is saved to disk under  media/screenshots/  and the relative URL is stored.
+  • After a successful report, returns trusted seller recommendations from the
+    same category as the reported seller.
+"""
+
 import os
-import tempfile
 import uuid
+import shutil
+import logging
+from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from typing import Optional
 
 from app.db.database import get_db
-from app.models.models import Report, SellerProfile, SellerContact, User, Platform, ScamType
-from app.schemas.schemas import (
-    ReportSubmitResponse,
-    ReportsListResponse,
-    ReportResponse,
-    TrustedSellerItem,
-    ReportSubmitWithRecommendationsResponse,
-)
-from app.services.cloudinary_service import upload_screenshot
+from app.models.models import Report, SellerProfile, ScamType
+from app.schemas.schemas import ReportSubmitWithRecommendationsResponse, TrustedSellerItem
 from app.routes.auth import get_current_user
-from app.db.crud import get_trusted_sellers_by_category
-from ai import assess_report_credibility, classify_seller_category
+from ai.scoring.recommender import get_trusted_alternatives
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/jpg"}
+# ── Screenshot storage config ─────────────────────────────────────────────────
+# Screenshots are saved in  <project_root>/media/screenshots/
+# Adjust SCREENSHOT_DIR to wherever your static files are served from.
+
+SCREENSHOT_DIR = Path("media") / "screenshots"
+SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_SCREENSHOT_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
-def _detect_platform(profile_url: str) -> Platform:
-    if "instagram.com" in profile_url:
-        return Platform.instagram
-    return Platform.facebook
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-
-def _upsert_seller(db: Session, profile_url: str) -> SellerProfile:
-    """Find existing seller or create a minimal profile."""
-    seller = db.query(SellerProfile).filter(
-        SellerProfile.profile_url == profile_url
-    ).first()
-
-    if not seller:
-        seller = SellerProfile(
-            profile_url=profile_url,
-            platform=_detect_platform(profile_url),
+def _save_screenshot(file: UploadFile) -> str:
+    """
+    Validate and persist the uploaded screenshot.
+    Returns the relative URL path (e.g. '/media/screenshots/<uuid>.jpg').
+    Raises HTTPException on invalid file type or size.
+    """
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type '{file.content_type}'. Allowed: JPEG, PNG, WebP, GIF.",
         )
-        db.add(seller)
-        db.commit()
-        db.refresh(seller)
 
+    # Read into memory to check size
+    contents = file.file.read()
+    if len(contents) > MAX_SCREENSHOT_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="Screenshot too large. Maximum allowed size is 10 MB.",
+        )
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "jpg"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    dest = SCREENSHOT_DIR / filename
+
+    with open(dest, "wb") as f:
+        f.write(contents)
+
+    return f"/media/screenshots/{filename}"
+
+
+def _lookup_seller_by_url(db: Session, seller_url: str) -> SellerProfile:
+    """
+    Find a SellerProfile by profile URL (partial match, same as the search
+    endpoint uses).  Raises 404 if not found.
+    """
+    seller = (
+        db.query(SellerProfile)
+        .filter(SellerProfile.profile_url.ilike(f"%{seller_url.strip()}%"))
+        .first()
+    )
+    if not seller:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Seller not found. Make sure the profile has been searched/scraped "
+                "at least once before submitting a report."
+            ),
+        )
     return seller
 
 
-def _save_contacts(db: Session, seller_id: uuid.UUID, contacts: list[str]):
-    """
-    Parse and save contact strings submitted with the report.
-    Format expected: "phone:0661234567" or "telegram:@handle" or "other:value"
-    """
-    from app.models.models import SellerContact, ContactType
+# ── Routes ────────────────────────────────────────────────────────────────────
 
-    for contact_str in contacts:
-        try:
-            contact_type_str, contact_value = contact_str.split(":", 1)
-            try:
-                contact_type = ContactType(contact_type_str.strip())
-            except ValueError:
-                contact_type = ContactType.other
-
-            # Check for duplicate before inserting
-            existing = db.query(SellerContact).filter(
-                SellerContact.seller_id == seller_id,
-                SellerContact.contact_value == contact_value.strip()
-            ).first()
-
-            if not existing:
-                db.add(SellerContact(
-                    seller_id=seller_id,
-                    contact_type=contact_type,
-                    contact_value=contact_value.strip(),
-                ))
-        except ValueError:
-            continue  # skip malformed contact strings
-
-    db.commit()
-
-
-@router.post("/", response_model=ReportSubmitWithRecommendationsResponse)
-def submit_report(
-    profile_url: str = Form(...),
-    scam_type: str = Form(...),
+@router.post("/reports/", response_model=ReportSubmitWithRecommendationsResponse)
+async def submit_report(
+    # ── Seller identified by profile URL, not internal UUID ──────────────
+    seller_url:  str           = Form(...,  description="Facebook / Instagram / TikTok profile URL"),
+    scam_type:   str           = Form(...),
     description: Optional[str] = Form(None),
-    screenshot: UploadFile = File(...),
-    contacts: list[str] = Form(default=[]),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    # ── Screenshot uploaded as a file from the user's PC ─────────────────
+    screenshot:  UploadFile    = File(...,  description="Screenshot image (JPEG / PNG / WebP, max 10 MB)"),
+    db:          Session       = Depends(get_db),
+    current_user               = Depends(get_current_user),
 ):
-    # Validate scam_type
-    if scam_type not in ScamType._value2member_map_:
-        raise HTTPException(status_code=400, detail=f"Invalid scam_type: {scam_type}")
+    # ── 1. Resolve seller by URL ───────────────────────────────────────────
+    seller = _lookup_seller_by_url(db, seller_url)
 
-    # Validate screenshot file type
-    if screenshot.content_type not in ALLOWED_IMAGE_TYPES:
+    # ── 2. Validate scam_type ──────────────────────────────────────────────
+    valid_types = {e.value for e in ScamType}
+    if scam_type not in valid_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type: {screenshot.content_type}. Only JPEG, PNG, WEBP allowed."
+            detail=f"Invalid scam_type. Must be one of: {', '.join(sorted(valid_types))}",
         )
 
-    temp_path = None
-    try:
-        # Save screenshot to temp file — used for both Cloudinary and OCR
-        suffix = os.path.splitext(screenshot.filename)[1] if screenshot.filename else ".png"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(screenshot.file.read())
-            temp_path = tmp.name
+    # ── 3. Save screenshot ────────────────────────────────────────────────
+    screenshot_url = _save_screenshot(screenshot)
 
-        # Upload to Cloudinary — permanent URL stored in DB
+    # ── 4. AI credibility scoring ──────────────────────────────────────────
+    credibility_score  = None
+    credibility_label  = None
+    credibility_reason = None
+
+    if description:
         try:
-            screenshot_url = upload_screenshot(temp_path)
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Screenshot upload failed: {str(e)}"
+            from ai import analyze_text
+            analysis          = analyze_text(description)
+            is_scam           = analysis.get("label") == "scam"
+            conf              = float(analysis.get("confidence", 0.5))
+            credibility_score = round(conf if is_scam else conf * 0.4, 3)
+            credibility_label = (
+                "high"   if credibility_score >= 0.7 else
+                "medium" if credibility_score >= 0.4 else "low"
             )
+            credibility_reason = ", ".join(analysis.get("red_flags", [])) or None
+        except Exception as exc:
+            logger.warning("Credibility scoring failed: %s", exc)
 
-        # Run credibility scoring — OCR + LLM
-        try:
-            credibility = assess_report_credibility(
-                scam_type=scam_type,
-                description=description,
-                screenshot_path=temp_path,
-            )
-        except Exception:
-            # Credibility scoring failure must not block report submission
-            credibility = {
-                "credibility_score": 0.3,
-                "credibility_label": "low",
-                "reason": "تعذر تحليل المصداقية تلقائياً",
-                "screenshot_supports_claim": False,
-            }
-
-    finally:
-        # Always delete temp file
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
-
-    # Upsert seller profile
-    seller = _upsert_seller(db, profile_url.strip())
-
-    # Save optional contacts
-    if contacts:
-        _save_contacts(db, seller.id, contacts)
-
-    # Insert report
+    # ── 5. Persist report ──────────────────────────────────────────────────
     report = Report(
-        seller_id=seller.id,
-        reporter_id=current_user.id,
-        scam_type=ScamType(scam_type),
-        description=description,
-        screenshot_url=screenshot_url,
-        credibility_score=credibility["credibility_score"],
-        credibility_reason=credibility["reason"],
+        seller_id          = seller.id,
+        reporter_id        = current_user.id,
+        scam_type          = ScamType(scam_type),
+        description        = description,
+        screenshot_url     = screenshot_url,
+        credibility_score  = credibility_score,
+        credibility_reason = credibility_reason,
     )
     db.add(report)
+
+    # ── 6. Auto-classify seller category if not already set ───────────────
+    if not seller.category:
+        try:
+            from ai.category.classifier import classify_seller_category
+
+            text_for_cat = " ".join(filter(None, [
+                seller.display_name,
+                seller.profile_url,
+                description,
+            ]))
+            if text_for_cat.strip():
+                seller.category = classify_seller_category(text_for_cat)
+        except Exception as exc:
+            logger.warning("Category classification failed: %s", exc)
+
     db.commit()
     db.refresh(report)
 
-    # ── Classify reported seller's category & fetch recommendations ───────────
-    seller_text = f"{seller.display_name or ''} {profile_url}"
-    category = classify_seller_category(seller_text)
-
-    # Persist category on the seller profile if not already set
-    if not seller.category:
-        seller.category = category
-        db.add(seller)
-        db.commit()
-
-    trusted = get_trusted_sellers_by_category(
-        db,
-        category=category,
-        exclude_seller_id=seller.id,
-        limit=3,
+    # ── 7. Trusted seller recommendations ─────────────────────────────────
+    recommendations = get_trusted_alternatives(
+        db=db,
+        category=seller.category,
+        exclude_seller_id=str(seller.id),
+        limit=5,
     )
-
-    recommendations = [
-        TrustedSellerItem(
-            id=str(s.id),
-            display_name=s.display_name,
-            profile_url=s.profile_url,
-            platform=s.platform.value,
-            category=s.category,
-        )
-        for s in trusted
-    ]
 
     return ReportSubmitWithRecommendationsResponse(
-        success=True,
-        report_id=str(report.id),
-        credibility_score=credibility["credibility_score"],
-        credibility_label=credibility["credibility_label"],
-        message="تم تسجيل بلاغك بنجاح",
-        recommendations=recommendations,
+        success           = True,
+        report_id         = str(report.id),
+        credibility_score = credibility_score,
+        credibility_label = credibility_label,
+        message           = "تم تسجيل البلاغ بنجاح",
+        recommendations   = [TrustedSellerItem(**r) for r in recommendations],
     )
 
-@router.get("/", response_model=ReportsListResponse)
-def get_reports(seller_id: str, db: Session = Depends(get_db)):
-    try:
-        seller_uuid = uuid.UUID(seller_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid seller_id format")
+
+@router.get("/reports/")
+def get_reports(seller_url: str, db: Session = Depends(get_db)):
+    """Return all reports for a seller identified by profile URL."""
+    seller = _lookup_seller_by_url(db, seller_url)
 
     reports = (
         db.query(Report)
-        .filter(Report.seller_id == seller_uuid)
-        .order_by(Report.credibility_score.desc().nullslast())
+        .filter(Report.seller_id == seller.id)
+        .order_by(Report.created_at.desc())
         .all()
     )
 
-    result = []
-    for r in reports:
-        reporter = db.query(User).filter(User.id == r.reporter_id).first()
-        result.append(ReportResponse(
-            id=str(r.id),
-            seller_id=str(r.seller_id),
-            scam_type=r.scam_type.value,
-            description=r.description,
-            screenshot_url=r.screenshot_url,
-            credibility_score=r.credibility_score,
-            credibility_reason=r.credibility_reason,
-            reporter_email=reporter.email if reporter else "unknown",
-            created_at=r.created_at.isoformat(),
-        ))
-
-    return ReportsListResponse(reports=result)
+    return {
+        "reports": [
+            {
+                "id":                 str(r.id),
+                "seller_id":          str(r.seller_id),
+                "scam_type":          r.scam_type.value,
+                "description":        r.description,
+                "screenshot_url":     r.screenshot_url,
+                "credibility_score":  r.credibility_score,
+                "credibility_reason": r.credibility_reason,
+                "created_at":         r.created_at.isoformat(),
+            }
+            for r in reports
+        ]
+    }

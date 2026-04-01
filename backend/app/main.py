@@ -1,18 +1,21 @@
 import sys
 import os
+from pathlib import Path
 
 # Must be BEFORE any local imports that depend on the 'ai' package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-
-from app.routes import scrape
-from app.routes import ai_features  
-from app.routes import buyer_history                                        # ← ADD 1
-
+# Ensure media/screenshots dir exists before StaticFiles mounts it
+Path("media/screenshots").mkdir(parents=True, exist_ok=True)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from app.routes import scrape
+from app.routes import ai_features
+from app.routes import buyer_history
 from app.routes import auth, search, analyze, reports, reviews, blacklist
 
 app = FastAPI(title="Thiqa API", version="1.0.0")
@@ -32,8 +35,10 @@ app.include_router(reports.router,       prefix="/api/reports",   tags=["reports
 app.include_router(reviews.router,       prefix="/api/reviews",   tags=["reviews"])
 app.include_router(blacklist.router,     prefix="/api/blacklist", tags=["blacklist"])
 app.include_router(scrape.router,        prefix="/api/scrape",    tags=["scrape"])
-app.include_router(ai_features.router,   prefix="/api/ai",        tags=["ai"])  
+app.include_router(ai_features.router,   prefix="/api/ai",        tags=["ai"])
 app.include_router(buyer_history.router, prefix="/api/history",   tags=["history"])
+
+app.mount("/media", StaticFiles(directory="media"), name="media")
 
 
 @app.get("/debug/step")

@@ -15,12 +15,17 @@ import json
 import re
 from ai.utils.llm_client import call_llm
 
+# FIX: system instruction moved to the system role instead of buried in the
+#      user message — gives the model clearer separation of context vs task
+_SYSTEM = (
+    'أنت مساعد تحليل المصداقية لمنصة "ثقة" (Thiqa)، منصة جزائرية للتحقق من البائعين. '
+    "مهمتك تلخيص تقييمات المشترين بدقة وموضوعية."
+)
+
 
 def _build_prompt(feedbacks: list[str]) -> str:
     numbered = "\n".join(f"{i+1}. {fb.strip()}" for i, fb in enumerate(feedbacks))
-    return f"""أنت مساعد تحليل المصداقية لمنصة "ثقة" (Thiqa)، منصة جزائرية للتحقق من البائعين.
-
-مهمتك: اقرأ كل تقييمات المشترين التالية عن بائع واحد وأعط ملخصاً موحداً.
+    return f"""اقرأ كل تقييمات المشترين التالية عن بائع واحد وأعط ملخصاً موحداً.
 
 التقييمات:
 {numbered}
@@ -60,13 +65,13 @@ def summarize_feedbacks(feedbacks: list[str]) -> dict:
             "total_count": 0,
         }
 
-    raw = call_llm(_build_prompt(feedbacks))
-    result = _parse(raw)
+    raw    = call_llm(_build_prompt(feedbacks), system=_SYSTEM)
+    result = _parse(raw, total_count=len(feedbacks))
     result["total_count"] = len(feedbacks)
     return result
 
 
-def _parse(raw: str) -> dict:
+def _parse(raw: str, total_count: int = 0) -> dict:
     """Mirrors the JSON-extraction pattern used in llm_analyzer.py."""
     try:
         return json.loads(raw)
@@ -77,13 +82,13 @@ def _parse(raw: str) -> dict:
                 return json.loads(match.group())
             except json.JSONDecodeError:
                 pass
-    return _fallback()
+    return _fallback(total_count)
 
 
-def _fallback() -> dict:
+def _fallback(total_count: int = 0) -> dict:
     return {
         "summary": "ما قدرناش نلخصو التقييمات، كن حذر.",
         "sentiment_hint": "mixed",
         "language_used": "darija",
-        "total_count": 0,
+        "total_count": total_count,   # FIX: was hardcoded 0
     }

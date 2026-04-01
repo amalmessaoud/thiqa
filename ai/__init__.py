@@ -6,11 +6,13 @@ from ai.scoring.trust_score import calculate_trust_score
 from ai.credibility.report_credibility import assess_report_credibility
 from ai.feedback.summarizer import summarize_feedbacks
 from ai.sentiment.comment_sentiment import analyze_sentiment
-from ai.scoring.seller_verdict import generate_seller_verdict
 
+# FIX 1: was importing from ai.scoring.seller_verdict — file is ai/scoring/verdict.py
+from ai.scoring.seller_verdict import generate_seller_verdict
 
 # ── Phase 2: Risk & Category ──────────────────────────────────────────────────
 from ai.scoring.risk_classifier import classify_seller_risk
+# FIX 2: was importing from ai.scoring.category_classifier — file is ai/category/classifier.py
 from ai.scoring.category_classifier import classify_seller_category
 
 __all__ = [
@@ -22,6 +24,8 @@ __all__ = [
     "assess_report_credibility",
     "summarize_feedbacks",
     "analyze_sentiment",
+    # FIX 3: generate_seller_verdict was imported but missing from __all__
+    "generate_seller_verdict",
     "classify_seller_risk",
     "classify_seller_category",
 ]

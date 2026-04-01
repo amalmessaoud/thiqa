@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.config import APIFY_API_KEY 
+from app.config import APIFY_API_KEY
 
 from app.db.database import get_db
 from app.schemas.schemas import AnalyzeRequest, AnalyzeResponse, HistoryItem
@@ -24,7 +24,6 @@ from app.services.scraping import (
     scrape_tt_post,
 )
 
-
 from app.schemas.schemas import SentimentRequest, SentimentResponse
 from ai.sentiment.comment_sentiment import (
     analyze_sentiment,
@@ -33,9 +32,39 @@ from ai.sentiment.comment_sentiment import (
 )
 
 
-
 router = APIRouter()
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _coerce_str(val) -> str:
+    """Flatten list-or-str fields — Facebook scraper returns bio/about as a list."""
+    if val is None:
+        return ""
+    if isinstance(val, list):
+        return " ".join(str(item) for item in val if item)
+    return str(val)
+
+
+_LIST_STR_FIELDS = (
+    "bio", "about", "description", "biography",
+    "category", "website", "phone",
+)
+
+
+def _sanitize_normalized(data: dict) -> dict:
+    """
+    Coerce any field that should be a string but arrived as a list
+    (common with Facebook's Apify scraper response).
+    Mutates and returns the dict in-place for convenience.
+    """
+    for field in _LIST_STR_FIELDS:
+        if field in data and isinstance(data[field], list):
+            data[field] = _coerce_str(data[field])
+    return data
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/scraping", response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
@@ -65,6 +94,12 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
         raise HTTPException(404, "No data returned. Page may be private or URL invalid.")
 
     normalized = normalize(platform, raw)
+
+    # FIX: Facebook scraper returns certain fields (bio, about, description,
+    # website, phone) as lists instead of strings.  Coerce them before
+    # passing to create_analysis() / any regex that expects a str.
+    normalized = _sanitize_normalized(normalized)
+
     record = crud.create_analysis(db, req.url, platform, normalized)
 
     return AnalyzeResponse(
@@ -74,7 +109,6 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
         data=normalized,
         created_at=str(record.created_at),
     )
-
 
 
 @router.get("/history", response_model=list[HistoryItem])
@@ -106,4 +140,3 @@ def get_record(record_id: str, db: Session = Depends(get_db)):
 def delete_record(record_id: str, db: Session = Depends(get_db)):
     crud.delete_record(db, record_id)
     return {"deleted": True}
-
