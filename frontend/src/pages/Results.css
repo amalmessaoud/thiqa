@@ -1,0 +1,248 @@
+.results-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px;
+  background: linear-gradient(180deg, #f0fdf8 0%, #ffffff 60%);
+  min-height: 100vh;
+  font-family: 'Rubik', sans-serif;
+}
+
+.results-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 36px;
+  width: 100%;
+}
+
+.results-logo {
+  font-size: 48px;
+  font-weight: 800;
+  color: #122040;
+  margin-bottom: 8px;
+}
+
+.results-logo span { color: #1D9E75; }
+
+.results-subtitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #122040;
+  margin-bottom: 24px;
+}
+
+/* Reuse search styles from Home */
+.search-card {
+  background: #ffffff;
+  border: 1.5px solid #B0E4CC;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(29, 158, 117, 0.08);
+  width: 580px;
+  max-width: 100%;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.search-input {
+  flex: 1;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 10px;
+  outline: none;
+  padding: 14px 16px;
+  font-size: 15px;
+  color: #122040;
+  text-align: right;
+  background: #f9f9f9;
+  font-family: 'Rubik', sans-serif;
+}
+
+.search-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #122040;
+  color: #ffffff;
+  border: none;
+  padding: 14px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-family: 'Rubik', sans-serif;
+}
+
+.search-btn:hover { background: #1a2e5a; }
+
+.search-hint {
+  font-size: 13px;
+  color: #888;
+  text-align: right;
+}
+
+.search-hint span { color: #1D9E75; font-weight: 500; }
+
+/* Results section */
+.results-section {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.results-section h2 {
+  font-size: 20px;
+  font-weight: 700;
+  text-align: right;
+  color: #122040;
+}
+
+.results-card {
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.results-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  text-align: right;
+  margin-bottom: 14px;
+  color: #122040;
+}
+
+.fb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fb-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #444;
+  direction: rtl;
+}
+
+/* Trust card */
+.results-trust-card {
+  background: #ffffff;
+  border: 1.5px solid #B0E4CC;
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.results-trust-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #122040;
+}
+
+.results-verdict {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #fffdf5;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: right;
+  font-size: 13px;
+  color: #555;
+  direction: rtl;
+}
+
+
+/* Report card */
+.results-report-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid #B0E4CC;
+  border-radius: 14px;
+  padding: 18px 20px;
+  cursor: pointer;
+  direction: rtl;
+}
+
+.results-report-card:hover { border-color: #1D9E75; }
+
+.report-icon-small {
+  background: #f0fdf8;
+  border-radius: 10px;
+  padding: 10px;
+  color: #1D9E75;
+  flex-shrink: 0;
+}
+
+.report-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #122040;
+}
+
+.report-sub {
+  font-size: 12px;
+  color: #888;
+}
+
+/* Tools */
+.results-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.tool-card-small {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #B0E4CC;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  direction: rtl;
+}
+
+.tool-card-small:hover { border-color: #1D9E75; }
+
+.tool-icon-small {
+  background: #f0fdf8;
+  border-radius: 8px;
+  padding: 10px;
+  color: #1D9E75;
+  flex-shrink: 0;
+}
+
+.tool-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #122040;
+}
+
+.tool-sub {
+  font-size: 12px;
+  color: #888;
+}
+
+@media (max-width: 600px) {
+  .results-logo { font-size: 36px; }
+  .results-tools { grid-template-columns: 1fr; }
+  .results-page { padding: 24px 16px; }
+}

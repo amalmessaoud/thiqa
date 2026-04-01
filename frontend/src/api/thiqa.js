@@ -41,20 +41,16 @@ export const thiqaApi = {
   },
 
   // Reports
-  submitReport: ({
-    profile_url,
-    scam_type,
-    description,
-    screenshot,
-    contacts,
-  }) => {
+  submitReport: ({ profile_url, scam_type, description, screenshot, contacts }) => {
     const form = new FormData();
     form.append("profile_url", profile_url);
     form.append("scam_type", scam_type);
     if (description) form.append("description", description);
-    form.append("screenshot", screenshot);
+    if (screenshot) form.append("screenshot", screenshot);
     if (contacts) form.append("contacts", JSON.stringify(contacts));
-    return api.post("/reports/", form).then((r) => r.data);
+    return api.post("/reports/", form, {
+      headers: { "Content-Type": "multipart/form-data" }
+    }).then((r) => r.data);
   },
 
   getReports: (seller_id) =>
