@@ -12,7 +12,7 @@ Thiqa lets Algerian buyers instantly verify online sellers before paying. Paste 
 
 | Layer    | Technology                                                 |
 | -------- | ---------------------------------------------------------- |
-| Frontend | React + Vite + Tailwind CSS                                |
+| Frontend | React + Vite + CSS                                         |
 | Backend  | FastAPI + SQLAlchemy + Alembic                             |
 | Database | PostgreSQL                                                 |
 | AI / NLP | AraBERT (fine-tuned) + Groq LLaMA + EasyOCR + EfficientNet |
