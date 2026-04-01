@@ -1,14 +1,14 @@
 import "./Analyze.css";
+import "./TextAnalyze.css";
 import { useState } from "react";
-import { FiImage, FiUpload } from "react-icons/fi";
+import { FiSearch, FiFileText } from "react-icons/fi";
 import { thiqaApi } from "../api/thiqa";
 import PrimaryButton from "../components/PrimaryButton";
 import UploadBox from "../components/UploadBox";
 import ResultsPlaceholder from "../components/ResultsPlaceholder";
-import TrustScore from "../components/TrustScore";
 import AiVerdict from "../components/AiVerdict";
 
-export default function Analyze() {
+export default function TextAnalyze() {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -27,7 +27,7 @@ export default function Analyze() {
     setError("");
     setLoading(true);
     try {
-      const data = await thiqaApi.analyzeImage(image);
+      const data = await thiqaApi.analyzeScreenshot(image);
       setResult(data);
     } catch (e) {
       setError("حدث خطأ أثناء التحليل، حاول مرة أخرى");
@@ -39,36 +39,46 @@ export default function Analyze() {
   return (
     <main className="analyze-page" dir="rtl">
       <div className="analyze-header">
-        <div className="analyze-header-icon" style={{ background: "#f0fdf8", color: "#1D9E75" }}>
-          <FiImage size={28} />
+        <div className="analyze-header-icon" style={{ background: "#f0f4ff", color: "#122040" }}>
+          <FiSearch size={28} />
         </div>
-        <h1>تحليل صور</h1>
-        <p>ارفع صورة منتج أو إعلان للكشف عن الصور المزيفة</p>
+        <h1>تحليل النصوص والرسائل</h1>
+        <p>ارفع صورة لمحادثة أو اعلان للكشف عن البائعين المزيفين</p>
       </div>
 
       <div className="analyze-card">
         <div className="analyze-card-title">
-          <FiUpload size={16} /> رفع الصورة
+          <FiFileText size={16} /> صورة النص أو المحادثة
         </div>
-        <UploadBox image={image} onChange={handleImageChange} />
+        <UploadBox
+          image={image}
+          onChange={handleImageChange}
+          hint="صورة محادثة من واتساب، إنستغرام، أو أي منصة"
+        />
+        <div className="how-it-works">
+          <p><strong>كيف يعمل:</strong></p>
+          <p>١. استخراج النص من الصورة</p>
+          <p>٢. تحليل النص بحثاً عن أنماط النصب</p>
+        </div>
         {error && <div className="analyze-error">{error}</div>}
         <PrimaryButton fullWidth onClick={handleAnalyze}>
           {loading ? "جاري التحليل..." : "تحليل"}
         </PrimaryButton>
       </div>
 
-      {/* Results */}
       {result ? (
         <div className="analyze-results">
-          {result.trust_score && <TrustScore score={result.trust_score.score} />}
-          {result.verdict_narrative && <AiVerdict text={result.verdict_narrative} />}
-          {result.is_fake !== undefined && (
-            <div className={`analyze-verdict ${result.is_fake ? "fake" : "real"}`}>
-              {result.is_fake ? "⚠️ الصورة مشبوهة أو مزيفة" : "✅ الصورة تبدو أصلية"}
+          {result.extracted_text && (
+            <div className="analyze-extracted">
+              <p className="analyze-extracted-label">النص المستخرج:</p>
+              <p className="analyze-extracted-text">{result.extracted_text}</p>
             </div>
           )}
-          {result.verdict && (
-            <div className="analyze-verdict-text">{result.verdict}</div>
+          {result.verdict_narrative && <AiVerdict text={result.verdict_narrative} />}
+          {result.is_scam !== undefined && (
+            <div className={`analyze-verdict ${result.is_scam ? "fake" : "real"}`}>
+              {result.is_scam ? "⚠️ محادثة مشبوهة - احذر من هذا البائع" : "✅ المحادثة تبدو طبيعية"}
+            </div>
           )}
         </div>
       ) : (

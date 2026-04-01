@@ -1,0 +1,154 @@
+.report-card-item {
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  direction: rtl;
+}
+
+.report-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.report-card-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #122040;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.report-card-icon {
+  background: #fff5f5;
+  color: #e53e3e;
+  border-radius: 50%;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.report-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.report-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #122040;
+  margin: 0;
+}
+
+.report-card-date {
+  font-size: 12px;
+  color: #aaa;
+  margin: 0;
+}
+
+.report-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.report-card-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e53e3e;
+}
+
+.report-card-comment {
+  font-size: 13px;
+  color: #555;
+  text-align: right;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.proof-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f9f9f9;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  font-family: 'Rubik', sans-serif;
+  width: fit-content;
+  transition: all 0.2s;
+}
+
+.proof-btn:hover {
+  border-color: #1D9E75;
+  color: #1D9E75;
+}
+
+.proof-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.proof-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.proof-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e8e8e8;
+  direction: rtl;
+  font-size: 15px;
+  font-weight: 600;
+  color: #122040;
+}
+
+.proof-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  display: flex;
+  align-items: center;
+}
+
+.proof-close:hover { color: #122040; }
+
+.proof-image {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  background: #f9f9f9;
+}
