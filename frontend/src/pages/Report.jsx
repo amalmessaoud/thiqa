@@ -26,6 +26,7 @@ export default function Report() {
   const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [fbLink, setFbLink] = useState("");
+  const [fbLinkError, setFbLinkError] = useState(false); // NEW
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [description, setDescription] = useState("");
   const [image, setImage] = useState(null);
@@ -35,6 +36,7 @@ export default function Report() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [recommendations, setRecommendations] = useState([]);
+
   function toggleType(type) {
     setSelectedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
@@ -47,28 +49,32 @@ export default function Report() {
 
   async function handleSubmit() {
     if (!user) {
-      setError("⚠️ يجب تسجيل الدخول أولاً");
+      setError(" يجب تسجيل الدخول أولاً");
       navigate("/auth");
       return;
     }
 
-    if (!fbLink && !phone && !username) {
-      setError("⚠️ أدخل رقم الهاتف أو اسم المستخدم أو رابط الحساب");
+    // Validate URL (required)
+    if (!fbLink.trim()) {
+      setFbLinkError(true);
+      setError(" رابط الحساب مطلوب");
       return;
+    } else {
+      setFbLinkError(false);
     }
 
     if (selectedTypes.length === 0) {
-      setError("⚠️ اختر نوع النصب على الأقل");
+      setError(" اختر نوع النصب على الأقل");
       return;
     }
 
     if (!description.trim()) {
-      setError("⚠️ يرجى كتابة وصف واضح للمشكلة");
+      setError(" يرجى كتابة وصف واضح للمشكلة");
       return;
     }
 
     if (!image) {
-      setError("⚠️ يجب إرفاق صورة كدليل");
+      setError(" يجب إرفاق صورة كدليل");
       return;
     }
 
@@ -77,7 +83,7 @@ export default function Report() {
 
     try {
       const response = await thiqaApi.submitReport({
-        seller_url: fbLink || username || phone,
+        seller_url: fbLink,
         platform: platform,
         scam_type: selectedTypes.join(","),
         description,
@@ -86,16 +92,15 @@ export default function Report() {
 
       setSuccess(true);
 
-      // ✅ Capture top 3 recommendations
       if (response?.recommendations?.length > 0) {
-        setRecommendations(response.recommendations.slice(0, 3));
+        setRecommendations(response.recommendations.slice(0, 10));
       }
     } catch (e) {
       if (e.response?.status === 400)
-        setError("⚠️ البيانات غير صحيحة، تحقق منها");
+        setError(" البيانات غير صحيحة، تحقق منها");
       else if (e.response?.status === 500)
-        setError("⚠️ خطأ في الخادم، حاول لاحقاً");
-      else setError("⚠️ حدث خطأ غير متوقع");
+        setError(" خطأ في الخادم، حاول لاحقاً");
+      else setError(" حدث خطأ غير متوقع");
     } finally {
       setLoading(false);
     }
@@ -125,17 +130,28 @@ export default function Report() {
         <p className="section-hint">
           أدخل أي معلومة تعرفها عن البائع (واحد على الأقل):
         </p>
+
         <div className="platform-select">
           <label>المنصة</label>
-          <select
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value)}
-          >
-            <option value="facebook">Facebook</option>
-            <option value="instagram">Instagram</option>
-            <option value="tiktok">TikTok</option>
-          </select>
+          <div className="platform-options">
+            {[
+              { value: "facebook", label: "Facebook", color: "#1877f2" },
+              { value: "instagram", label: "Instagram", color: "#e1306c" },
+              { value: "tiktok", label: "TikTok", color: "#010101" },
+            ].map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                className={`platform-option ${platform === p.value ? "active" : ""}`}
+                style={{ "--platform-color": p.color }}
+                onClick={() => setPlatform(p.value)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
+
         <div className="report-fields">
           <FormInput
             label="رقم الهاتف"
@@ -153,17 +169,36 @@ export default function Report() {
             onChange={(e) => setUsername(e.target.value)}
             icon={<FiUser size={16} />}
           />
-          <FormInput
-            label={`رابط ${platform}`}
-            type="text"
-            placeholder={`${platform}.com/...`}
-            value={fbLink}
-            onChange={(e) => setFbLink(e.target.value)}
-            icon={<FiLink size={16} />}
-          />
+
+          {/* URL field with required indicator and inline error */}
+          <div className="form-field-wrapper">
+            <FormInput
+              label={
+                <span>
+                  رابط {platform} <span style={{ color: "red" }}>*</span>
+                </span>
+              }
+              type="text"
+              placeholder={`${platform}.com/...`}
+              value={fbLink}
+              onChange={(e) => {
+                setFbLink(e.target.value);
+                if (e.target.value.trim()) setFbLinkError(false);
+              }}
+              icon={<FiLink size={16} />}
+              style={fbLinkError ? { borderColor: "red" } : {}}
+            />
+            {fbLinkError && (
+              <p style={{ color: "red", fontSize: "0.8rem", marginTop: "4px", textAlign: "right" }}>
+                 رابط الحساب مطلوب
+              </p>
+            )}
+          </div>
         </div>
       </div>
+
       <div className="report-top"></div>
+
       <div className="report-section">
         <h2>نوع النصب</h2>
         <div className="scam-types">
@@ -179,32 +214,6 @@ export default function Report() {
           ))}
         </div>
       </div>
-      {/* ===== Recommendations Popup ===== */}
-      {recommendations.length > 0 && (
-        <div className="recommendation-modal">
-          <div className="recommendation-content">
-            <h2>توصيات مشابهة</h2>
-            <p>قد تكون هذه الحسابات مرتبطة ببلاغات مشابهة:</p>
-            <ul>
-              {recommendations.map((rec) => (
-                <li key={rec.id}>
-                  <a
-                    href={rec.profile_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {rec.display_name || rec.profile_url} ({rec.platform})
-                  </a>{" "}
-                  - {rec.category}
-                </li>
-              ))}
-            </ul>
-            <PrimaryButton onClick={() => setRecommendations([])}>
-              إغلاق
-            </PrimaryButton>
-          </div>
-        </div>
-      )}
 
       <div className="report-section">
         <h2>
@@ -212,7 +221,7 @@ export default function Report() {
         </h2>
         <textarea
           className="report-textarea"
-          placeholder="اشرح ما حدث بالتفصيل... كيف تواصلت مع البائع، ماذا طلب، ماذا حدث، إلخ."
+          placeholder="اشرح ما حدث بالتفصيلاً... كيف تواصلت مع البائع، ماذا طلب، ماذا حدث، إلخ."
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={5}
@@ -269,6 +278,133 @@ export default function Report() {
           <li>✓ كلما زادت التقارير، انخفضت نقاط الثقة أكثر</li>
         </ul>
       </div>
+
+      {/* ===== Recommendations Modal ===== */}
+{/* ===== Recommendations Modal ===== */}
+{recommendations.length > 0 && (
+  <div
+    className="recommendation-modal"
+    onClick={(e) =>
+      e.target === e.currentTarget && setRecommendations([])
+    }
+  >
+    <div className="recommendation-content">
+      <div className="recommendation-header">
+        <div className="rec-success-badge">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <h2>تم إرسال البلاغ بنجاح</h2>
+        <p>بائعون موثوقون في نفس الفئة</p>
+      </div>
+
+      <div className="recommendation-list">
+        {recommendations.map((rec, index) => {
+          const initial = (
+            rec.display_name ||
+            rec.profile_url ||
+            "?"
+          )[0].toUpperCase();
+
+          const platformMeta = {
+            facebook: {
+              color: "#1877f2",
+              bg: "#e8f0fd",
+              label: "Facebook",
+            },
+            instagram: {
+              color: "#e1306c",
+              bg: "#fde8ef",
+              label: "Instagram",
+            },
+            tiktok: {
+              color: "#333",
+              bg: "#ebebeb",
+              label: "TikTok",
+            },
+          };
+
+          const meta = platformMeta[rec.platform] || {
+            color: "#888",
+            bg: "#f0f0f0",
+            label: rec.platform,
+          };
+
+          return (
+            <a
+              key={rec.id}
+              href={rec.profile_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="recommendation-card"
+            >
+              <span className="rec-index">{index + 1}</span>
+
+              <div
+                className="rec-avatar"
+                style={{ background: meta.bg, color: meta.color }}
+              >
+                {initial}
+              </div>
+
+              <div className="rec-info">
+                <span className="rec-name">
+                  {rec.display_name || rec.profile_url}
+                </span>
+
+                <div className="rec-tags">
+                  <span
+                    className="rec-pill"
+                    style={{ background: meta.bg, color: meta.color }}
+                  >
+                    {meta.label}
+                  </span>
+
+                  {rec.category && (
+                    <span className="rec-pill rec-pill-neutral">
+                      {rec.category}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <svg
+                className="rec-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </a>
+          );
+        })}
+      </div>
+
+      <button
+        className="rec-close-btn"
+        onClick={() => setRecommendations([])}
+      >
+        إغلاق
+      </button>
+    </div>
+  </div>
+)}
     </main>
   );
 }

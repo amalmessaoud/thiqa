@@ -275,24 +275,236 @@
   border: none;
   cursor: pointer;
 }
+/* ── Recommendation Modal (upgraded) ─────────────────────────── */
 .recommendation-modal {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgba(18, 32, 64, 0.45);
+  backdrop-filter: blur(6px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 999;
+  padding: 20px;
 }
 
 .recommendation-content {
-  background: white;
-  padding: 2rem;
+  background: #fff;
+  border-radius: 20px;
+  max-width: 460px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(18, 32, 64, 0.18), 0 0 0 1px rgba(18,32,64,0.06);
+}
+
+.recommendation-header {
+  padding: 32px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.rec-success-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #e8faf3;
+  color: #1d9e75;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.recommendation-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #122040;
+  letter-spacing: -0.3px;
+}
+
+.recommendation-header p {
+  margin: 0;
+  font-size: 13px;
+  color: #999;
+}
+
+.recommendation-list {
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.recommendation-list::-webkit-scrollbar {
+  width: 4px;
+}
+.recommendation-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.recommendation-list::-webkit-scrollbar-thumb {
+  background: #e0e0e0;
+  border-radius: 4px;
+}
+
+.recommendation-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
   border-radius: 12px;
-  max-width: 400px;
-  width: 90%;
+  border: 1px solid #f0f0f0;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.14s, border-color 0.14s;
+  flex-direction: row-reverse;
+}
+
+.recommendation-card:hover {
+  background: #f8fffe;
+  border-color: #c8edd9;
+}
+
+.rec-index {
+  font-size: 11px;
+  color: #ccc;
+  font-weight: 700;
+  min-width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.rec-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.rec-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+  text-align: right;
+  min-width: 0;
+}
+
+.rec-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #122040;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rec-tags {
+  display: flex;
+  gap: 5px;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+}
+
+.rec-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.rec-pill-neutral {
+  background: #f3f3f3;
+  color: #888;
+}
+
+.rec-chevron {
+  color: #ddd;
+  flex-shrink: 0;
+  transition: color 0.14s;
+}
+
+.recommendation-card:hover .rec-chevron {
+  color: #1d9e75;
+}
+
+.rec-close-btn {
+  margin: 10px 16px 16px;
+  padding: 13px;
+  border: none;
+  border-radius: 12px;
+  background: #f5f5f5;
+  color: #666;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: "Rubik", sans-serif;
+  transition: background 0.14s;
+  flex-shrink: 0;
+}
+
+.rec-close-btn:hover {
+  background: #ececec;
+}
+
+.platform-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.platform-select label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #122040;
   text-align: right;
 }
+
+.platform-options {
+  display: flex;
+  gap: 8px;
+  flex-direction: row-reverse;
+}
+
+.platform-option {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #888;
+  cursor: pointer;
+  font-family: "Rubik", sans-serif;
+  transition: all 0.18s ease;
+}
+
+.platform-option:hover {
+  border-color: var(--platform-color);
+  color: var(--platform-color);
+  background: color-mix(in srgb, var(--platform-color) 6%, white);
+}
+
+.platform-option.active {
+  border-color: var(--platform-color);
+  background: color-mix(in srgb, var(--platform-color) 10%, white);
+  color: var(--platform-color);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--platform-color) 20%, transparent);
+}
+

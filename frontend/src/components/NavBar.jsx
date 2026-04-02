@@ -10,6 +10,7 @@ import {
   FiFileText,
   FiAlertTriangle,
   FiSlash,
+  FiStar,
 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/logo.svg";
@@ -25,6 +26,11 @@ const NAV_LINKS = [
     path: "/report",
     label: "الإبلاغ عن البائعين",
     icon: <FiAlertTriangle size={16} />,
+  },
+  {
+    path: "/review",
+    label: "تقييم البائعين",
+    icon: <FiStar size={16} />,
   },
   { path: "/blacklist", label: "القائمة السوداء", icon: <FiSlash size={16} /> },
 ];
