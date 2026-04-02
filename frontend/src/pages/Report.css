@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   gap: 32px;
-  font-family: 'Rubik', sans-serif;
+  font-family: "Rubik", sans-serif;
 }
 
 /* Header */
@@ -18,10 +18,10 @@
 }
 
 .report-header-icon {
-  background: #FFE2E2;
+  background: #ffe2e2;
   border-radius: 50%;
   padding: 16px;
-  color: #E7000B;
+  color: #e7000b;
   margin-bottom: 4px;
 }
 
@@ -40,7 +40,7 @@
 /* Warning */
 .report-warning {
   background: #fffafa;
-  border: 1px solid #E7000B;
+  border: 1px solid #e7000b;
   border-radius: 10px;
   padding: 14px 18px;
   font-size: 13px;
@@ -49,7 +49,7 @@
 }
 
 .warning-label {
-  color: #E7000B;
+  color: #e7000b;
   font-weight: 700;
 }
 
@@ -109,7 +109,7 @@
 }
 
 .scam-type-option input[type="checkbox"] {
-  accent-color: #1D9E75;
+  accent-color: #1d9e75;
   width: 16px;
   height: 16px;
   cursor: pointer;
@@ -122,7 +122,7 @@
   border-radius: 8px;
   padding: 14px;
   font-size: 14px;
-  font-family: 'Rubik', sans-serif;
+  font-family: "Rubik", sans-serif;
   color: #122040;
   text-align: right;
   resize: vertical;
@@ -132,7 +132,7 @@
 }
 
 .report-textarea:focus {
-  border-color: #1D9E75;
+  border-color: #1d9e75;
 }
 
 /* Upload */
@@ -140,15 +140,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px dashed #B0E4CC;
+  border: 1.5px dashed #b0e4cc;
   border-radius: 12px;
   padding: 36px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .upload-area:hover {
-  border-color: #1D9E75;
+  border-color: #1d9e75;
   background: #f0fdf8;
 }
 
@@ -162,12 +164,12 @@
 }
 
 .upload-placeholder svg {
-  color: #B0E4CC;
+  color: #b0e4cc;
 }
 
 .upload-filename {
   font-size: 14px;
-  color: #1D9E75;
+  color: #1d9e75;
   font-weight: 600;
 }
 
@@ -179,7 +181,7 @@
 /* How it works */
 .report-howto {
   background: #f8fffe;
-  border: 1px solid #B0E4CC;
+  border: 1px solid #b0e4cc;
   border-radius: 14px;
   padding: 24px;
 }
@@ -187,7 +189,7 @@
 .report-howto h3 {
   font-size: 16px;
   font-weight: 700;
-  color: #1D9E75;
+  color: #1d9e75;
   margin: 0 0 14px;
   text-align: right;
 }
@@ -218,7 +220,6 @@
   }
 }
 
-
 .report-error {
   background: #fff5f5;
   border: 1px solid #feb2b2;
@@ -231,11 +232,67 @@
 
 .report-success {
   background: #f0fdf8;
-  border: 1px solid #B0E4CC;
+  border: 1px solid #b0e4cc;
   border-radius: 10px;
   padding: 14px 18px;
-  color: #1D9E75;
+  color: #1d9e75;
   font-size: 14px;
   text-align: right;
   font-weight: 600;
+}
+.recommendation-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.recommendation-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 90%;
+  position: relative;
+  text-align: right;
+}
+
+.recommendation-content h2 {
+  margin-top: 0;
+}
+
+.close-btn {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.recommendation-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.recommendation-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 90%;
+  text-align: right;
 }

@@ -23,14 +23,10 @@ export default function TextAnalyze() {
   }
 
   async function handleAnalyze() {
-<<<<<<< HEAD
-    if (!image) {
+    if (images.length === 0) {
       setError("يرجى رفع صورة أولاً");
       return;
     }
-=======
-    if (images.length === 0) { setError("يرجى رفع صورة أولاً"); return; }
->>>>>>> origin/feature/amina-search-Profil-Analysis-AI
     setError("");
     setLoading(true);
     try {

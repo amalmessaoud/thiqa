@@ -25,7 +25,7 @@ function Layout() {
         <Route path="/text-analyze" element={<TextAnalyze />} />
         <Route path="/report" element={<Report />} />
         <Route path="/review/:sellerId" element={<Review />} />
-        <Route path="/seller/:sellerId" element={<SellerProfile />} />
+        <Route path="/seller/:sellerUrl" element={<SellerProfile />} />
         <Route path="/blacklist" element={<Blacklist />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/profile" element={<Profile />} />

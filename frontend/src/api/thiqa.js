@@ -42,27 +42,30 @@ export const thiqaApi = {
 
   // Reports
   submitReport: ({
-    profile_url,
+    seller_url,
+    platform, // <--- add this
     scam_type,
     description,
     screenshot,
     contacts,
   }) => {
     const form = new FormData();
-    form.append("profile_url", profile_url);
+    form.append("seller_url", seller_url);
+    form.append("platform", platform); // <--- send it
     form.append("scam_type", scam_type);
     if (description) form.append("description", description);
     if (screenshot) form.append("screenshot", screenshot);
     if (contacts) form.append("contacts", JSON.stringify(contacts));
+
     return api
-      .post("/reports/", form, {
+      .post("/reports/reports/", form, {
         headers: { "Content-Type": "multipart/form-data" },
       })
       .then((r) => r.data);
   },
 
   getReports: (seller_id) =>
-    api.get(`/reports/?seller_id=${seller_id}`).then((r) => r.data),
+    api.get(`/reports/reports/?seller_id=${seller_id}`).then((r) => r.data),
 
   // Reviews
   submitReview: (data) => api.post("/reviews/", data).then((r) => r.data),

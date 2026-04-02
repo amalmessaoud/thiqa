@@ -13,7 +13,6 @@ Changes vs original:
     same category as the reported seller.
 """
 
-import os
 import uuid
 import logging
 from pathlib import Path
@@ -79,19 +78,10 @@ def _detect_platform(url: str) -> Platform:
     return Platform.facebook
 
 
-def _lookup_or_create_seller(db: Session, seller_url: str) -> SellerProfile:
-    """
-    Find or create a SellerProfile by profile URL.
-
-    If the seller doesn't exist yet, a minimal stub record is created so that
-    reports can be submitted immediately for any URL.  The stub will be fully
-    enriched (display_name, followers, photos, trust score, etc.) the next
-    time GET /search/ is called with the same URL — create_analysis() in
-    crud.py detects the existing row by profile_url and updates it in-place,
-    so all reports linked to the stub's id remain correctly associated.
-    """
+def _lookup_or_create_seller(db: Session, seller_url: str, platform: str) -> SellerProfile:
     url = seller_url.strip()
 
+    # <-- assign to seller
     seller = (
         db.query(SellerProfile)
         .filter(SellerProfile.profile_url.ilike(f"%{url}%"))
@@ -102,12 +92,11 @@ def _lookup_or_create_seller(db: Session, seller_url: str) -> SellerProfile:
         return seller
 
     # ── Create a minimal stub ─────────────────────────────────────────────
+    platform_enum = Platform(platform)
     seller = SellerProfile(
         id          = uuid.uuid4(),
         profile_url = url,
-        platform    = _detect_platform(url),
-        # display_name, profile_photo_url, account_age_days, etc. left NULL
-        # — they will be populated on the first /search/ call.
+        platform    = platform_enum,
     )
     db.add(seller)
     db.commit()
@@ -115,12 +104,12 @@ def _lookup_or_create_seller(db: Session, seller_url: str) -> SellerProfile:
     logger.info("Created stub seller profile for %s (id=%s)", url, seller.id)
     return seller
 
-
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/reports/", response_model=ReportSubmitWithRecommendationsResponse)
 async def submit_report(
     seller_url:  str           = Form(...,  description="Facebook / Instagram / TikTok profile URL"),
+    platform: str = Form(..., description="Platform: facebook | instagram | tiktok"),
     scam_type:   str           = Form(...),
     description: Optional[str] = Form(None),
     screenshot:  UploadFile    = File(...,  description="Screenshot image (JPEG / PNG / WebP, max 10 MB)"),
@@ -128,7 +117,7 @@ async def submit_report(
     current_user               = Depends(get_current_user),
 ):
     # ── 1. Resolve or create seller by URL ────────────────────────────────
-    seller = _lookup_or_create_seller(db, seller_url)
+    seller = _lookup_or_create_seller(db, seller_url, platform)
 
     # ── 2. Validate scam_type ─────────────────────────────────────────────
     valid_types = {e.value for e in ScamType}
@@ -138,6 +127,13 @@ async def submit_report(
             detail=f"Invalid scam_type. Must be one of: {', '.join(sorted(valid_types))}",
         )
 
+
+    valid_platforms = {e.value for e in Platform}
+    if platform not in valid_platforms:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid platform. Must be one of: {', '.join(valid_platforms)}",
+        )
     # ── 3. Save screenshot ────────────────────────────────────────────────
     screenshot_url = _save_screenshot(screenshot)
 

@@ -14,6 +14,10 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const initials = (user?.full_name || user?.email || "NA")
+    .slice(0, 2)
+    .toUpperCase();
+
   useEffect(() => {
     if (!user?.id) return;
 
@@ -23,7 +27,6 @@ export default function Profile() {
     thiqaApi
       .getUserHistory(user.id)
       .then((data) => {
-        // Map API fields to your ReviewCard/ReportCard props
         const mappedReviews = data.reviews.map((r) => ({
           id: r.id,
           seller: r.seller_url || "Unknown Seller",
@@ -52,7 +55,9 @@ export default function Profile() {
                 : "منخفض",
           comment: r.description,
           date: r.created_at,
-          proof: r.screenshot_url,
+          proof: r.screenshot_url
+            ? `http://127.0.0.1:8000${r.screenshot_url}`
+            : null,
         }));
 
         setReviews(mappedReviews);
@@ -61,7 +66,6 @@ export default function Profile() {
       .catch(() => setError("حدث خطأ أثناء جلب سجل المستخدم"))
       .finally(() => setLoading(false));
   }, [user?.id]);
-  console.log(`User : `, user);
   return (
     <main className="profile-page" dir="rtl">
       <div className="profile-user-card">

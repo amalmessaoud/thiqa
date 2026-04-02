@@ -315,3 +315,15 @@ class ReportSubmitWithRecommendationsResponse(BaseModel):
     credibility_label: Optional[str]
     message:           str
     recommendations:   list[TrustedSellerItem]
+    
+class ReviewResponse(BaseModel):
+    id: str
+    seller_id: str
+    stars: int
+    comment: Optional[str]
+    product_matched: bool = False
+    responded_fast: bool = False
+    item_received: bool = False
+    would_buy_again: bool = False
+    reviewer_email: str
+    created_at: str
