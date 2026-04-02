@@ -324,7 +324,7 @@ export default function SellerProfile() {
           <PrimaryButton
             fullWidth
             variant="green"
-            onClick={() => navigate(`/review/${seller.id}`)}
+            onClick={() => navigate(`/review/`)}
           >
             <FiStar size={16} /> ترك تقييم
           </PrimaryButton>

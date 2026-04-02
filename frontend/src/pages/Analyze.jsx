@@ -200,11 +200,11 @@ const TABS = [
   },
   {
     key: "text",
-    label: "تحليل النصوص",
+    label: "تحليل المحادثات",
     icon: <FiSearch size={17} />,
     headerIcon: { bg: "#f0f4ff", color: "#122040", el: <FiSearch size={28} /> },
-    title: "تحليل النصوص والرسائل",
-    subtitle: "ارفع صورة أو أكثر لمحادثة أو إعلان للكشف عن البائعين المزيفين",
+    title: "تحليل المحادثات والرسائل",
+    subtitle: "ارفع صورة أو أكثر لمحادثة للكشف عن البائعين المزيفين",
     component: <TextTab />,
   },
 ];

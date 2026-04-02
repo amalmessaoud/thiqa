@@ -7,7 +7,7 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
-  font-family: 'Rubik', sans-serif;
+  font-family: "Rubik", sans-serif;
 }
 
 .review-header {
@@ -20,7 +20,7 @@
 
 .review-header-icon {
   background: #f0fdf8;
-  color: #1D9E75;
+  color: #1d9e75;
   border-radius: 50%;
   padding: 16px;
   margin-bottom: 4px;
@@ -76,7 +76,9 @@
   text-align: right;
 }
 
-.required { color: #e53e3e; }
+.required {
+  color: #e53e3e;
+}
 
 /* Star Rating */
 .star-rating {
@@ -94,11 +96,17 @@
   color: #ddd;
   padding: 0;
   line-height: 1;
-  transition: color 0.15s, transform 0.1s;
+  transition:
+    color 0.15s,
+    transform 0.1s;
 }
 
-.star-btn.filled { color: #f5a623; }
-.star-btn:hover { transform: scale(1.2); }
+.star-btn.filled {
+  color: #f5a623;
+}
+.star-btn:hover {
+  transform: scale(1.2);
+}
 
 /* Criteria */
 .criteria-list {
@@ -117,7 +125,9 @@
   border-radius: 10px;
   padding: 14px 16px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   direction: rtl;
   width: 100%;
   box-sizing: border-box;
@@ -125,7 +135,7 @@
 
 .criteria-item.checked {
   background: #f0fdf8;
-  border-color: #1D9E75;
+  border-color: #1d9e75;
 }
 
 .criteria-label {
@@ -152,16 +162,21 @@
 }
 
 .criteria-check.active {
-  background: #1D9E75;
-  border-color: #1D9E75;
+  background: #1d9e75;
+  border-color: #1d9e75;
 }
 
 @media (max-width: 600px) {
-  .review-page { padding: 24px 16px; }
-  .review-card { padding: 20px 16px; }
-  .star-btn { font-size: 28px; }
+  .review-page {
+    padding: 24px 16px;
+  }
+  .review-card {
+    padding: 20px 16px;
+  }
+  .star-btn {
+    font-size: 28px;
+  }
 }
-
 
 .results-loading {
   text-align: center;
@@ -202,11 +217,39 @@
 
 .review-success {
   background: #f0fdf8;
-  border: 1px solid #B0E4CC;
+  border: 1px solid #b0e4cc;
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
-  color: #1D9E75;
+  color: #1d9e75;
   font-weight: 600;
   text-align: right;
+}
+.review-field textarea {
+  width: 100%;
+  font-family: "Rubik", sans-serif;
+  font-size: 14px;
+  color: #122040;
+  background: #f9f9f9;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  padding: 14px 16px;
+  resize: vertical;
+  outline: none;
+  direction: rtl;
+  line-height: 1.7;
+  box-sizing: border-box;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.review-field textarea::placeholder {
+  color: #bbb;
+  font-family: "Rubik", sans-serif;
+}
+
+.review-field textarea:focus {
+  border-color: #1d9e75;
+  background: #ffffff;
 }
