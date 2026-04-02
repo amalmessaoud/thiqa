@@ -1,6 +1,6 @@
 import "./Home.css";
 import { useNavigate } from "react-router-dom";
-import { FiAlertTriangle, FiImage, FiFileText } from "react-icons/fi";
+import { FiAlertTriangle, FiImage, FiFileText, FiStar } from "react-icons/fi";
 import SearchBar from "../components/SearchBar";
 import logo from "../assets/logo.svg";
 
@@ -15,11 +15,28 @@ export default function Home() {
         <SearchBar />
       </section>
 
-      <section className="report-card" onClick={() => navigate("/report")}>
-        <div className="report-icon"><FiAlertTriangle size={24} /></div>
-        <div className="report-text">
-          <h3>إبلاغ عن بائع</h3>
-          <p>ساعد المجتمع بالإبلاغ عن البائعين النصابين</p>
+      <section className="cards-row">
+        <div className="report-card" onClick={() => navigate("/report")}>
+          <div className="report-icon">
+            <FiAlertTriangle size={24} />
+          </div>
+          <div className="report-text">
+            <h3>إبلاغ عن بائع</h3>
+            <p>ساعد المجتمع بالإبلاغ عن البائعين النصابين</p>
+          </div>
+        </div>
+
+        <div
+          className="report-card review-card"
+          onClick={() => navigate("/review")}
+        >
+          <div className="report-icon review-icon">
+            <FiStar size={24} />
+          </div>
+          <div className="report-text">
+            <h3>تقييم البائع</h3>
+            <p>شارك تجربتك وقيّم البائع لمساعدة الآخرين</p>
+          </div>
         </div>
       </section>
 
@@ -27,14 +44,18 @@ export default function Home() {
         <h2>أدوات أخرى</h2>
         <div className="tools-grid">
           <div className="tool-card" onClick={() => navigate("/analyze")}>
-            <div className="tool-icon"><FiImage size={22} /></div>
+            <div className="tool-icon">
+              <FiImage size={22} />
+            </div>
             <div className="tool-text">
               <h3>تحليل الصور</h3>
               <p>ارفع صورة منتج أو إعلان للكشف عن الصور المزيفة</p>
             </div>
           </div>
-          <div className="tool-card" onClick={() => navigate("/text-analyze")}>
-            <div className="tool-icon"><FiFileText size={22} /></div>
+          <div className="tool-card" onClick={() => navigate("/analyze")}>
+            <div className="tool-icon">
+              <FiFileText size={22} />
+            </div>
             <div className="tool-text">
               <h3>تحليل النصوص</h3>
               <p>ارفع صورة لمحادثة أو اعلان للكشف عن البائعين المزيفين</p>

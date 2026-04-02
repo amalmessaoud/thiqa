@@ -1,15 +1,31 @@
 import "./NavBar.css";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FiUser, FiMenu, FiX, FiHome, FiImage, FiFileText, FiAlertTriangle, FiSlash } from "react-icons/fi";
+import {
+  FiUser,
+  FiMenu,
+  FiX,
+  FiHome,
+  FiImage,
+  FiFileText,
+  FiAlertTriangle,
+  FiSlash,
+} from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/logo.svg";
 
 const NAV_LINKS = [
   { path: "/", label: "الصفحة الرئيسية", icon: <FiHome size={16} /> },
-  { path: "/analyze", label: "محلل الصور", icon: <FiImage size={16} /> },
-  { path: "/text-analyze", label: "محلل النصوص والرسائل", icon: <FiFileText size={16} /> },
-  { path: "/report", label: "الإبلاغ عن البائعين", icon: <FiAlertTriangle size={16} /> },
+  {
+    path: "/analyze",
+    label: "محلل الصور و الرسائل",
+    icon: <FiImage size={16} />,
+  },
+  {
+    path: "/report",
+    label: "الإبلاغ عن البائعين",
+    icon: <FiAlertTriangle size={16} />,
+  },
   { path: "/blacklist", label: "القائمة السوداء", icon: <FiSlash size={16} /> },
 ];
 
@@ -43,7 +59,9 @@ export default function Navbar() {
         <ul className="navbar-links">
           {NAV_LINKS.map((l) => (
             <li key={l.path}>
-              <Link to={l.path} className={isActive(l.path)}>{l.label}</Link>
+              <Link to={l.path} className={isActive(l.path)}>
+                {l.label}
+              </Link>
             </li>
           ))}
         </ul>
@@ -52,7 +70,10 @@ export default function Navbar() {
         <div className="navbar-actions">
           {user ? (
             <>
-              <button className="btn-profile" onClick={() => navigate("/profile")}>
+              <button
+                className="btn-profile"
+                onClick={() => navigate("/profile")}
+              >
                 <FiUser size={15} /> الملف الشخصي
               </button>
               <button className="btn-logout" onClick={handleLogout}>
@@ -61,26 +82,45 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              <Link to="/auth" className="btn-login">تسجيل الدخول</Link>
-              <Link to="/auth" state={{ register: true }} className="btn-register">إنشاء حساب</Link>
+              <Link to="/auth" className="btn-login">
+                تسجيل الدخول
+              </Link>
+              <Link
+                to="/auth"
+                state={{ register: true }}
+                className="btn-register"
+              >
+                إنشاء حساب
+              </Link>
             </>
           )}
         </div>
 
         {/* Hamburger */}
-        <button className="hamburger" onClick={() => setOpen(true)} aria-label="open menu">
+        <button
+          className="hamburger"
+          onClick={() => setOpen(true)}
+          aria-label="open menu"
+        >
           <FiMenu size={26} />
         </button>
       </nav>
 
       {/* Overlay */}
-      <div className={`sidebar-overlay${open ? " visible" : ""}`} onClick={close} />
+      <div
+        className={`sidebar-overlay${open ? " visible" : ""}`}
+        onClick={close}
+      />
 
       {/* Sidebar */}
       <aside className={`sidebar${open ? " open" : ""}`} dir="rtl">
         <div className="sidebar-top">
           <img src={logo} alt="Thiqa" className="sidebar-logo" />
-          <button className="sidebar-close" onClick={close} aria-label="close menu">
+          <button
+            className="sidebar-close"
+            onClick={close}
+            aria-label="close menu"
+          >
             <FiX size={24} />
           </button>
         </div>
@@ -101,7 +141,10 @@ export default function Navbar() {
             <>
               <button
                 className="btn-profile full"
-                onClick={() => { navigate("/profile"); close(); }}
+                onClick={() => {
+                  navigate("/profile");
+                  close();
+                }}
               >
                 <FiUser size={15} /> الملف الشخصي
               </button>
@@ -114,7 +157,12 @@ export default function Navbar() {
               <Link to="/auth" className="btn-login full" onClick={close}>
                 تسجيل الدخول
               </Link>
-              <Link to="/auth" state={{ register: true }} className="btn-register full" onClick={close}>
+              <Link
+                to="/auth"
+                state={{ register: true }}
+                className="btn-register full"
+                onClick={close}
+              >
                 إنشاء حساب
               </Link>
             </>
