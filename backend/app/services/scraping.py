@@ -19,7 +19,7 @@ log = logging.getLogger("thiqa")
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 APIFY_BASE     = "https://api.apify.com/v2"
-MAX_POSTS          = 15
+MAX_POSTS          = 25
 MAX_COMMENTS       = 20   # per post on profile scrape
 FETCH_COMMENTS     = 60   # fetch before filtering to top 20
 POST_COMMENTS      = 30   # for single post scrape
@@ -164,7 +164,7 @@ async def scrape_fb_post(api_key: str, url: str) -> dict:
     post_url = post.get("url") or url
     comment_items = await call_actor(api_key, ACTORS["fb_comments"], {
         "startUrls": [{"url": post_url}],
-        "maxComments": FETCH_POST_COMMENTS,   # ← was FETCH_COMMENTS
+        "maxComments": FETCH_POST_COMMENTS,
         "includeNestedComments": False,
     })
     post["latestComments"] = comment_items or []
@@ -202,7 +202,7 @@ async def scrape_ig_post(api_key: str, url: str) -> dict:
         "resultsType": "posts",
         "resultsLimit": 1,
         "addParentData": True,
-        "maxComments": FETCH_POST_COMMENTS,   # ← was FETCH_COMMENTS
+        "maxComments": FETCH_POST_COMMENTS,
     })
     return items[0] if items else {}
 
@@ -273,6 +273,14 @@ async def scrape_tt_profile(api_key: str, url: str) -> dict:
         "followingCount": author.get("following") or author.get("followingCount", 0),
         "videoCount":     author.get("video") or len(videos),
         "videos":         videos,
+        # FIX: expose author avatar for profile_photo_url
+        "profile_photo_url": (
+            author.get("avatarLarger")
+            or author.get("avatarMedium")
+            or author.get("avatarThumb")
+            or author.get("avatar")
+            or ""
+        ),
     }
 
 
@@ -284,7 +292,7 @@ async def scrape_tt_post(api_key: str, url: str) -> dict:
         }),
         call_actor(api_key, ACTORS["tt_comments"], {
             "postURLs": [url],
-            "commentsPerPost": FETCH_POST_COMMENTS,   # ← was FETCH_COMMENTS
+            "commentsPerPost": FETCH_POST_COMMENTS,
             "maxReplies": 0,
             "sortType": 1,
         }),
@@ -310,6 +318,19 @@ def normalize(platform: str, raw: dict) -> dict:
             rxn_wow   = p.get("reactionWowCount", 0)
             rxn_sad   = p.get("reactionSadCount", 0)
             rxn_angry = p.get("reactionAngryCount", 0)
+
+            # FIX: extract image URL from Facebook post media fields
+            media_list = p.get("media") or []
+            first_media = media_list[0] if media_list else {}
+            image_url = (
+                first_media.get("image") or
+                first_media.get("url") or
+                p.get("full_picture") or
+                p.get("picture") or
+                p.get("attachments", [{}])[0].get("media", {}).get("image", {}).get("src") if p.get("attachments") else None or
+                ""
+            )
+
             return {
                 "post_url":           p.get("url", ""),
                 "page_name":          p.get("pageName") or raw.get("title") or raw.get("pageName", ""),
@@ -326,35 +347,50 @@ def normalize(platform: str, raw: dict) -> dict:
                 "reaction_angry":     rxn_angry,
                 "total_reactions":    rxn_like + rxn_love + rxn_haha + rxn_wow + rxn_sad + rxn_angry,
                 "has_media":          bool(p.get("media") or p.get("isVideo")),
-                "media_count":        len(p.get("media") or []),
-                "media_descriptions": [m.get("text", "") for m in (p.get("media") or [])],
+                "media_count":        len(media_list),
+                "media_descriptions": [m.get("text", "") for m in media_list],
+                # FIX: image URL fields so _analyze_post_images can find them
+                "media_url":          image_url,
+                "display_url":        image_url,
+                "full_picture":       p.get("full_picture") or p.get("picture") or "",
                 "comment_list":       mix_comments(raw_comments, "likesCount", "date", limit=comment_limit),
             }
 
         posts = [norm_post(p) for p in posts_raw]
         n = len(posts) or 1
 
+        # FIX: extract Facebook page profile photo
+        fb_profile_photo = (
+            raw.get("profilePhoto") or
+            raw.get("profilePicture") or
+            raw.get("profileImageUrl") or
+            raw.get("cover", {}).get("source") if isinstance(raw.get("cover"), dict) else None or
+            ""
+        )
+
         return {
-            "page_url":       raw.get("pageUrl") or raw.get("facebookUrl", ""),
-            "page_name":      raw.get("title") or raw.get("pageName", ""),
-            "title":          raw.get("title") or raw.get("pageName", ""),
-            "bio":            raw.get("info") or raw.get("about") or raw.get("description", ""),
-            "intro":          raw.get("intro", ""),
-            "categories":     raw.get("categories") or [],
-            "followers":      raw.get("followers") or raw.get("fans", 0),
-            "followings":     raw.get("followings", 0),
-            "phone":          raw.get("phone"),
-            "email":          raw.get("email"),
-            "website":        (raw.get("websites") or [None])[0],
-            "address":        raw.get("address"),
-            "category":       (raw.get("categories") or [""])[0],
-            "creation_date":  raw.get("creationDate"),
-            "business_hours": raw.get("hours"),
-            "rating_percent": raw.get("ratingValue"),
-            "rating_count":   raw.get("reviewCount"),
-            "rating":         raw.get("ratingValue"),
-            "ad_status":      raw.get("pageIsAdsTransparent"),
-            "messenger":      raw.get("messenger"),
+            "page_url":          raw.get("pageUrl") or raw.get("facebookUrl", ""),
+            "page_name":         raw.get("title") or raw.get("pageName", ""),
+            "title":             raw.get("title") or raw.get("pageName", ""),
+            "bio":               raw.get("info") or raw.get("about") or raw.get("description", ""),
+            "intro":             raw.get("intro", ""),
+            "categories":        raw.get("categories") or [],
+            "followers":         raw.get("followers") or raw.get("fans", 0),
+            "followings":        raw.get("followings", 0),
+            "phone":             raw.get("phone"),
+            "email":             raw.get("email"),
+            "website":           (raw.get("websites") or [None])[0],
+            "address":           raw.get("address"),
+            "category":          (raw.get("categories") or [""])[0],
+            "creation_date":     raw.get("creationDate"),
+            "business_hours":    raw.get("hours"),
+            "rating_percent":    raw.get("ratingValue"),
+            "rating_count":      raw.get("reviewCount"),
+            "rating":            raw.get("ratingValue"),
+            "ad_status":         raw.get("pageIsAdsTransparent"),
+            "messenger":         raw.get("messenger"),
+            # FIX: profile photo
+            "profile_photo_url": fb_profile_photo,
             "stats": {
                 "post_count":             raw.get("postCount", len(posts)),
                 "posts_with_media":       sum(1 for p in posts if p["has_media"]),
@@ -377,6 +413,23 @@ def normalize(platform: str, raw: dict) -> dict:
         posts_src = raw.get("latestPosts") or ([raw] if platform == "ig_post" else [])
 
         def norm_ig_post(p):
+            # FIX: extract all possible image URL fields from Instagram post
+            image_url = (
+                p.get("displayUrl") or
+                p.get("display_url") or
+                p.get("thumbnailUrl") or
+                p.get("thumbnail_url") or
+                p.get("imageUrl") or
+                p.get("image_url") or
+                # carousel: first sidecar image
+                (((p.get("sidecarImages") or p.get("images") or [{}])[0]) or {}).get("displayUrl") or
+                ""
+            )
+            video_url = (
+                p.get("videoUrl") or
+                p.get("video_url") or
+                ""
+            )
             return {
                 "post_url":           p.get("url", ""),
                 "page_name":          raw.get("username", ""),
@@ -390,8 +443,12 @@ def normalize(platform: str, raw: dict) -> dict:
                 "reaction_wow":       0, "reaction_sad":  0, "reaction_angry": 0,
                 "total_reactions":    p.get("likesCount", 0),
                 "has_media":          True,
-                "media_count":        1,
+                "media_count":        len(p.get("sidecarImages") or p.get("images") or []) or 1,
                 "media_descriptions": [p.get("alt", "")],
+                # FIX: image URL fields for _analyze_post_images
+                "display_url":        image_url,
+                "media_url":          video_url or image_url,
+                "thumbnail_url":      p.get("thumbnailUrl") or image_url,
                 "comment_list": mix_comments(
                     p.get("latestComments") or p.get("comments") or [],
                     "likesCount", "timestamp", limit=comment_limit,
@@ -401,23 +458,47 @@ def normalize(platform: str, raw: dict) -> dict:
         posts = [norm_ig_post(p) for p in posts_src]
         n = len(posts) or 1
 
+        # FIX: robust followers extraction with multiple fallbacks
+        ig_followers = (
+            raw.get("followersCount") or
+            raw.get("followers") or
+            (raw.get("edge_followed_by") or {}).get("count") or
+            (raw.get("userInfo", {}) or {}).get("followersCount") or
+            0
+        )
+
+        # FIX: profile photo extraction with multiple fallbacks
+        ig_profile_photo = (
+            raw.get("profilePicUrlHD") or
+            raw.get("profilePicUrl") or
+            raw.get("profile_pic_url_hd") or
+            raw.get("profile_pic_url") or
+            raw.get("profilePictureUrl") or
+            raw.get("avatarUrl") or
+            ""
+        )
+
         return {
-            "page_url":       raw.get("url") or raw.get("inputUrl", ""),
-            "page_name":      raw.get("username", ""),
-            "title":          raw.get("fullName") or raw.get("username", ""),
-            "bio":            raw.get("biography", ""),
-            "intro":          raw.get("biography", ""),
-            "categories":     [raw.get("businessCategoryName")] if raw.get("businessCategoryName") else [],
-            "followers":      raw.get("followersCount", 0),
-            "followings":     raw.get("followsCount", 0),
-            "phone":          raw.get("businessPhoneNumber"),
-            "email":          raw.get("businessEmail"),
-            "website":        raw.get("externalUrl"),
-            "address":        (raw.get("businessAddress") or {}).get("street"),
-            "category":       raw.get("businessCategoryName"),
-            "creation_date":  None, "business_hours": None,
-            "rating_percent": None, "rating_count":   None, "rating": None,
-            "ad_status":      None, "messenger":      None,
+            "page_url":          raw.get("url") or raw.get("inputUrl", ""),
+            "page_name":         raw.get("username", ""),
+            "title":             raw.get("fullName") or raw.get("username", ""),
+            "bio":               raw.get("biography", ""),
+            "intro":             raw.get("biography", ""),
+            "categories":        [raw.get("businessCategoryName")] if raw.get("businessCategoryName") else [],
+            # FIX: robust followers
+            "followers":         ig_followers,
+            "followings":        raw.get("followsCount", 0),
+            "phone":             raw.get("businessPhoneNumber"),
+            "email":             raw.get("businessEmail"),
+            "website":           raw.get("externalUrl"),
+            "address":           (raw.get("businessAddress") or {}).get("street"),
+            "category":          raw.get("businessCategoryName"),
+            "creation_date":     None,
+            "business_hours":    None,
+            "rating_percent":    None, "rating_count": None, "rating": None,
+            "ad_status":         None, "messenger":    None,
+            # FIX: profile photo
+            "profile_photo_url": ig_profile_photo,
             "stats": {
                 "post_count":             raw.get("postsCount", len(posts)),
                 "posts_with_media":       len(posts),
@@ -444,6 +525,24 @@ def normalize(platform: str, raw: dict) -> dict:
 
         def norm_tt_post(v):
             vid_id = v.get("id") or v.get("videoId") or ""
+            author_meta = v.get("authorMeta") or v.get("author") or {}
+
+            # FIX: extract TikTok cover/thumbnail image URL
+            cover_url = (
+                v.get("covers", [None])[0] if v.get("covers") else None or
+                v.get("coverUrl") or
+                v.get("cover") or
+                v.get("originCoverUrl") or
+                v.get("dynamicCover") or
+                author_meta.get("avatarThumb") or
+                ""
+            )
+            video_url = (
+                v.get("webVideoUrl") or
+                v.get("videoUrl") or
+                ""
+            )
+
             return {
                 "post_url":           f"https://www.tiktok.com/@{username}/video/{vid_id}",
                 "page_name":          username,
@@ -459,6 +558,10 @@ def normalize(platform: str, raw: dict) -> dict:
                 "has_media":          True,
                 "media_count":        1,
                 "media_descriptions": [v.get("desc", "")],
+                # FIX: image/video URL fields for _analyze_post_images
+                "display_url":        cover_url,
+                "media_url":          video_url or cover_url,
+                "thumbnail_url":      cover_url,
                 "comment_list": mix_comments(
                     v.get("comments") if isinstance(v.get("comments"), list) else [],
                     "diggCount", "createTimeISO", limit=comment_limit,
@@ -468,20 +571,44 @@ def normalize(platform: str, raw: dict) -> dict:
         posts = [norm_tt_post(v) for v in videos_src]
         n = len(posts) or 1
 
+        # FIX: TikTok profile photo from author metadata
+        first_video = videos_src[0] if videos_src else {}
+        first_author = first_video.get("authorMeta") or first_video.get("author") or {}
+        tt_profile_photo = (
+            raw.get("profile_photo_url") or          # pre-set in scrape_tt_profile
+            first_author.get("avatarLarger") or
+            first_author.get("avatarMedium") or
+            first_author.get("avatarThumb") or
+            first_author.get("avatar") or
+            ""
+        )
+
+        # FIX: robust TikTok follower extraction
+        tt_followers = (
+            raw.get("followerCount") or
+            raw.get("fans") or
+            first_author.get("fans") or
+            first_author.get("followerCount") or
+            0
+        )
+
         return {
-            "page_url":       f"https://www.tiktok.com/@{username}",
-            "page_name":      username,
-            "title":          raw.get("nickname") or username,
-            "bio":            raw.get("signature") or raw.get("bio", ""),
-            "intro":          raw.get("signature", ""),
-            "categories":     [],
-            "followers":      raw.get("followerCount") or raw.get("fans", 0),
-            "followings":     raw.get("followingCount") or raw.get("following", 0),
-            "phone":          None, "email": None, "website": None, "address": None,
-            "category":       "TikTok Creator",
-            "creation_date":  None, "business_hours": None,
-            "rating_percent": None, "rating_count":   None, "rating": None,
-            "ad_status":      None, "messenger":      None,
+            "page_url":          f"https://www.tiktok.com/@{username}",
+            "page_name":         username,
+            "title":             raw.get("nickname") or username,
+            "bio":               raw.get("signature") or raw.get("bio", ""),
+            "intro":             raw.get("signature", ""),
+            "categories":        [],
+            # FIX: robust followers
+            "followers":         tt_followers,
+            "followings":        raw.get("followingCount") or raw.get("following", 0),
+            "phone":             None, "email": None, "website": None, "address": None,
+            "category":          "TikTok Creator",
+            "creation_date":     None, "business_hours": None,
+            "rating_percent":    None, "rating_count":   None, "rating": None,
+            "ad_status":         None, "messenger":      None,
+            # FIX: profile photo
+            "profile_photo_url": tt_profile_photo,
             "stats": {
                 "post_count":             raw.get("videoCount", len(posts)),
                 "posts_with_media":       len(posts),
