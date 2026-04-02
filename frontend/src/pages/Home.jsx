@@ -16,7 +16,6 @@ export default function Home() {
       </section>
 
       <section className="tools">
-        <h2>أدوات أخرى</h2>
         <div className="tools-grid">
           <div className="tool-card" onClick={() => navigate("/report")}>
             <div className="tool-icon">
