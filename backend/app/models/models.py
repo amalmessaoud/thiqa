@@ -33,6 +33,7 @@ class SellerProfile(Base):
     account_age_days  = Column(Integer, nullable=True)
     post_count        = Column(Integer, nullable=True)
     category = Column(Text, nullable=True)
+    trust_score       = Column(Integer, nullable=True)
     fb_fetched_at     = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at        = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
