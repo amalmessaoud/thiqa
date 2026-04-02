@@ -1,7 +1,7 @@
 import "./Results.css";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { FiAlertTriangle, FiImage, FiFileText, FiEye } from "react-icons/fi";
+import { FiAlertTriangle, FiImage, FiStar, FiEye } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import { thiqaApi } from "../api/thiqa";
 import SearchBar from "../components/SearchBar";
@@ -50,7 +50,6 @@ export default function Results() {
   function handleSellerProfile() {
     navigate(`/seller/${encodeURIComponent(seller?.profile_url || query)}`);
   }
-  console.log("SELLER:", seller);
 
   return (
     <main className="results-page" dir="rtl">
@@ -63,13 +62,9 @@ export default function Results() {
       <section className="results-section">
         <h2>نتائج البحث</h2>
 
-        {/* Loading */}
         {loading && <div className="results-loading">جاري البحث...</div>}
-
-        {/* Error */}
         {error && <div className="results-error">{error}</div>}
 
-        {/* No results */}
         {!loading && result && !result.found && (
           <div className="results-not-found">
             لم يتم العثور على بائع بهذه المعلومات
@@ -105,53 +100,43 @@ export default function Results() {
             <div className="results-trust-card">
               <TrustScore score={trust?.score} />
               <AiVerdict text={trust?.verdict_narrative} />
-              <PrimaryButton
-                fullWidth
-                variant="green"
-                onClick={handleSellerProfile}
-              >
+              <PrimaryButton fullWidth variant="green" onClick={handleSellerProfile}>
                 <FiEye /> عرض الملف الكامل للبائع
               </PrimaryButton>
             </div>
           </>
         )}
 
-        <div
-          className="results-report-card"
-          onClick={() => navigate("/report")}
-        >
-          <div className="report-icon-small">
-            <FiAlertTriangle size={20} />
-          </div>
-          <div>
-            <p className="report-title">إبلاغ عن بائع</p>
-            <p className="report-sub">
-              ساعد المجتمع بالإبلاغ عن البائعين النصابين
-            </p>
-          </div>
-        </div>
-
+        {/* Tools section — same style as Home */}
         <h2>أدوات أخرى</h2>
-        <div className="results-tools">
-          <div className="tool-card-small" onClick={() => navigate("/analyze")}>
-            <div className="tool-icon-small">
-              <FiImage size={18} />
+        <div className="results-tools-grid">
+          <div className="tool-card" onClick={() => navigate("/report")}>
+            <div className="tool-icon">
+              <FiAlertTriangle size={22} />
             </div>
-            <div>
-              <p className="tool-title">تحليل الصور</p>
-              <p className="tool-sub">ارفع صورة محادثة أو إعلان</p>
+            <div className="tool-text">
+              <h3>إبلاغ عن بائع</h3>
+              <p>ساعد المجتمع بالإبلاغ عن البائعين النصابين</p>
             </div>
           </div>
-          <div
-            className="tool-card-small"
-            onClick={() => navigate("/text-analyze")}
-          >
-            <div className="tool-icon-small">
-              <FiFileText size={18} />
+
+          <div className="tool-card" onClick={() => navigate("/review")}>
+            <div className="tool-icon">
+              <FiStar size={22} />
             </div>
-            <div>
-              <p className="tool-title">تحليل النصوص</p>
-              <p className="tool-sub">ألصق أي محادثة أو إعلان</p>
+            <div className="tool-text">
+              <h3>تقييم البائع</h3>
+              <p>شارك تجربتك وقيّم البائع لمساعدة الآخرين</p>
+            </div>
+          </div>
+
+          <div className="tool-card tool-card-full" onClick={() => navigate("/analyze")}>
+            <div className="tool-icon">
+              <FiImage size={22} />
+            </div>
+            <div className="tool-text">
+              <h3>تحليل الصور والرسائل</h3>
+              <p>ارفع صورة منتج أو محادثة للكشف عن الصور المزيفة</p>
             </div>
           </div>
         </div>
