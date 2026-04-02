@@ -207,3 +207,18 @@
   .profile-review-card,
   .profile-report-card { padding: 14px 16px; }
 }
+
+
+.profile-loading {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+  font-size: 15px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 24px;
+  color: #888;
+  font-size: 14px;
+}

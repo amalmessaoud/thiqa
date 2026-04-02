@@ -28,15 +28,15 @@ export const thiqaApi = {
   analyzeText: (text) =>
     api.post("/analyze/text/", { text }).then((r) => r.data),
 
-  analyzeScreenshot: (file) => {
+  analyzeScreenshot: (files) => {
     const form = new FormData();
-    form.append("screenshot", file);
+    Array.from(files).forEach((file) => form.append("screenshots", file));
     return api.post("/analyze/screenshot/", form).then((r) => r.data);
   },
 
-  analyzeImage: (file) => {
+  analyzeImage: (files) => {
     const form = new FormData();
-    form.append("image", file);
+    Array.from(files).forEach((file) => form.append("images", file));
     return api.post("/analyze/image/", form).then((r) => r.data);
   },
 

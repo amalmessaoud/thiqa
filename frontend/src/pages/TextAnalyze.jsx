@@ -9,25 +9,25 @@ import ResultsPlaceholder from "../components/ResultsPlaceholder";
 import AiVerdict from "../components/AiVerdict";
 
 export default function TextAnalyze() {
-  const [image, setImage] = useState(null);
+  const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
   function handleImageChange(e) {
-    if (e.target.files[0]) {
-      setImage(e.target.files[0]);
+    if (e.target.files.length > 0) {
+      setImages(e.target.files);
       setResult(null);
       setError("");
     }
   }
 
   async function handleAnalyze() {
-    if (!image) { setError("يرجى رفع صورة أولاً"); return; }
+    if (images.length === 0) { setError("يرجى رفع صورة أولاً"); return; }
     setError("");
     setLoading(true);
     try {
-      const data = await thiqaApi.analyzeScreenshot(image);
+      const data = await thiqaApi.analyzeScreenshot(images[0]);
       setResult(data);
     } catch (e) {
       setError("حدث خطأ أثناء التحليل، حاول مرة أخرى");
@@ -51,7 +51,7 @@ export default function TextAnalyze() {
           <FiFileText size={16} /> صورة النص أو المحادثة
         </div>
         <UploadBox
-          image={image}
+          images={images}
           onChange={handleImageChange}
           hint="صورة محادثة من واتساب، إنستغرام، أو أي منصة"
         />

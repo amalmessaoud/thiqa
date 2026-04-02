@@ -1,7 +1,7 @@
 import "./Results.css";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { FiAlertTriangle, FiImage, FiFileText, FiEye, FiPhone, FiLink } from "react-icons/fi";
+import { FiAlertTriangle, FiImage, FiFileText, FiEye } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import { thiqaApi } from "../api/thiqa";
 import SearchBar from "../components/SearchBar";
@@ -10,6 +10,16 @@ import SellerInfo from "../components/SellerInfo";
 import AiVerdict from "../components/AiVerdict";
 import PrimaryButton from "../components/PrimaryButton";
 import logo from "../assets/logo.svg";
+
+function formatAge(days) {
+  if (!days) return "غير معروف";
+  if (days < 30) return `${days} يوم`;
+  if (days < 365) return `${Math.floor(days / 30)} شهر`;
+  const years = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  if (months === 0) return `${years} سنة`;
+  return `${years} سنة و ${months} شهر`;
+}
 
 export default function Results() {
   const [searchParams] = useSearchParams();
@@ -33,13 +43,11 @@ export default function Results() {
 
   const seller = result?.seller;
   const trust = result?.trust_score;
-
-  // Extract phone and fb link from contacts
   const phone = seller?.contacts?.find((c) => c.type === "phone")?.value;
   const fbLink = seller?.contacts?.find((c) => c.type === "facebook")?.value;
 
   function handleSellerProfile() {
-    navigate(`/seller/${seller?.id || "sellerdz"}`);
+    navigate(`/seller/${encodeURIComponent(seller?.profile_url || query)}`);
   }
 
   return (
@@ -53,24 +61,12 @@ export default function Results() {
       <section className="results-section">
         <h2>نتائج البحث</h2>
 
-        {/* Loading */}
-        {loading && (
-          <div className="results-loading">جاري البحث...</div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="results-error">{error}</div>
-        )}
-
-        {/* No results */}
+        {loading && <div className="results-loading">جاري البحث...</div>}
+        {error && <div className="results-error">{error}</div>}
         {!loading && result && !result.found && (
-          <div className="results-not-found">
-            لم يتم العثور على بائع بهذه المعلومات
-          </div>
+          <div className="results-not-found">لم يتم العثور على بائع بهذه المعلومات</div>
         )}
 
-        {/* Results */}
         {!loading && result?.found && seller && (
           <>
             <SellerInfo
@@ -80,11 +76,11 @@ export default function Results() {
             />
 
             <div className="results-card">
-              <h3>🔗 تحليل فيسبوك</h3>
+              <h3>🔗 تحليل الحساب</h3>
               <div className="fb-rows">
                 <div className="fb-row">
                   <span>عمر الحساب</span>
-                  <span>{seller.account_age_days} يوم</span>
+                  <span>{formatAge(seller.account_age_days)}</span>
                 </div>
                 <div className="fb-row">
                   <span>عدد المنشورات</span>

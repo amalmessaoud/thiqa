@@ -263,3 +263,25 @@
   .seller-page { padding: 24px 16px; }
   .seller-stats { grid-template-columns: 1fr 1fr 1fr; }
 }
+
+
+.seller-loading {
+  text-align: center;
+  padding: 60px;
+  color: #888;
+  font-size: 15px;
+}
+
+.seller-error {
+  text-align: center;
+  padding: 60px;
+  color: #e53e3e;
+  font-size: 15px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 24px;
+  color: #888;
+  font-size: 14px;
+}
