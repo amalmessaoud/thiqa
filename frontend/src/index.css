@@ -40,3 +40,10 @@ h1, h2, h3 {
 p {
   margin: 0;
 }
+
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f0fdf8 0%, #ffffff 100%);
+  background-attachment: fixed;
+}

@@ -29,6 +29,9 @@ def get_blacklist(
         )
         .join(Report, Report.seller_id == SellerProfile.id)
         .group_by(SellerProfile.id)
+        .filter(
+            (SellerProfile.trust_score < 55) | (SellerProfile.trust_score.is_(None))
+        )
     )
 
     # ── Filters ───────────────────────────────────────────────────────────────

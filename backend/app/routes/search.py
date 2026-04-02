@@ -996,6 +996,16 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
     from ai.scoring.trust_score import _score_to_verdict
     trust["verdict"], trust["verdict_color"], trust["verdict_darija"] = _score_to_verdict(final_score)
 
+    # ── Persist trust score to DB ─────────────────────────────────────────────
+    try:
+        seller.trust_score = final_score
+        db.add(seller)
+        db.commit()
+        db.refresh(seller)
+    except Exception as exc:
+        logger.warning("Failed to persist trust_score: %s", exc)
+        db.rollback()
+
     recommendation = trust["verdict"]
 
     db.refresh(seller)
