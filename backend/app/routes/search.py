@@ -1,8 +1,11 @@
 # app/routes/search.py
 import re
+import os
 import logging
+import tempfile
 from datetime import datetime as _dt, timezone, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -16,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 _STALE_DAYS = 7
 
-
+MAX_IMAGES_TO_ANALYZE = 50 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _is_stale(seller: SellerProfile) -> bool:
@@ -29,8 +32,6 @@ def _is_stale(seller: SellerProfile) -> bool:
 def _is_incomplete(seller: SellerProfile) -> bool:
     """
     Detect a bad/partial first scrape so we re-scrape even if the record is fresh.
-    A record is considered incomplete when critical fields that the scraper SHOULD
-    have populated are still at their zero/null defaults.
     """
     followers  = getattr(seller, "followers",       None) or 0
     post_count = getattr(seller, "post_count",      None) or 0
@@ -38,14 +39,10 @@ def _is_incomplete(seller: SellerProfile) -> bool:
 
     if post_count > 0 and followers == 0 and eng_rate == 0:
         return True
-
     return False
 
 
 def _coerce_str(val) -> str:
-    """
-    Flatten list-or-str fields from Apify Facebook/Instagram responses.
-    """
     if val is None:
         return ""
     if isinstance(val, list):
@@ -54,10 +51,6 @@ def _coerce_str(val) -> str:
 
 
 def _estimate_age_from_bio(bio) -> int | None:
-    """
-    Parse 'Since YYYY' from bio → age in days. Handles Unicode bold digits.
-    Accepts list or str.
-    """
     if not bio:
         return None
     if isinstance(bio, list):
@@ -78,8 +71,50 @@ def _estimate_age_from_bio(bio) -> int | None:
     return None
 
 
+def _estimate_age_from_posts(scraped_data: dict) -> int | None:
+    """
+    FIX: Estimate account age from the oldest post date in the scraped sample.
+    This is a lower bound — the account is at least this old.
+    """
+    posts = scraped_data.get("posts") or []
+    if not posts:
+        return None
+
+    oldest_date = None
+    for post in posts:
+        date_val = post.get("date") or post.get("timestamp") or post.get("time")
+        if not date_val:
+            continue
+        try:
+            if isinstance(date_val, (int, float)):
+                dt = _dt.fromtimestamp(date_val, tz=timezone.utc)
+            elif isinstance(date_val, str):
+                # try ISO format first
+                for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                    try:
+                        dt = _dt.strptime(date_val[:19], fmt[:len(date_val[:19])].rstrip())
+                        dt = dt.replace(tzinfo=timezone.utc)
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    continue
+            else:
+                continue
+
+            if oldest_date is None or dt < oldest_date:
+                oldest_date = dt
+        except Exception:
+            continue
+
+    if oldest_date:
+        age_days = (_dt.now(timezone.utc) - oldest_date).days
+        if age_days > 0:
+            return age_days
+    return None
+
+
 def _extract_comments(scraped_data: dict) -> list[str]:
-    """Pull all comment texts from scraped posts, including replies."""
     comments = []
     for post in (scraped_data.get("posts") or []):
         for c in (post.get("comment_list") or []):
@@ -94,9 +129,6 @@ def _extract_comments(scraped_data: dict) -> list[str]:
 
 
 def _extract_comment_objects(scraped_data: dict):
-    """
-    Pull Comment objects (with author/likes/is_reply) from scraped posts.
-    """
     from ai.sentiment.comment_sentiment import Comment
 
     comment_objs = []
@@ -126,18 +158,10 @@ def _extract_comment_objects(scraped_data: dict):
 
 def _resolve_followers(scraped_data: dict) -> int:
     """
-    Extract follower count from scraped data with multi-platform fallback chain.
-
-    Different scrapers store followers under different keys:
-      TikTok:    scraped_data["followers"]  OR  scraped_data["stats"]["followers"]
-                 OR scraped_data["authorMeta"]["fans"]
-      Instagram: scraped_data["followers"]  OR  scraped_data["followersCount"]
-      Facebook:  scraped_data["followers"]  OR  scraped_data["likes"]
-                 OR scraped_data["stats"]["followers"]
-
-    Returns 0 if no follower count can be resolved.
+    Extract follower count with multi-platform fallback chain.
+    All values come directly from the platform profile — not computed from sample.
     """
-    # Direct top-level key (all platforms, ideal case)
+    # Direct top-level key (all platforms — set by normalizer)
     val = scraped_data.get("followers") or scraped_data.get("followersCount")
     if val and int(val) > 0:
         return int(val)
@@ -155,62 +179,71 @@ def _resolve_followers(scraped_data: dict) -> int:
         return int(val)
 
     # Facebook: page likes ≈ followers
-    val = scraped_data.get("likes") or scraped_data.get("pageAdminTopCountry")
+    val = scraped_data.get("likes")
     if val and isinstance(val, int) and val > 0:
         return val
+
+    # FIX: Instagram edge_followed_by nested field
+    val = (scraped_data.get("edge_followed_by") or {}).get("count")
+    if val and int(val) > 0:
+        return int(val)
 
     return 0
 
 
 def _build_engagement_signals(scraped_data: dict) -> dict:
     """
-    Extract engagement metrics from scraped data.
-
-    Now includes:
-    - Robust multi-platform follower resolution (fixes TikTok followers = 0)
-    - avg_shares_per_post from stats (viral signal)
-    - total_likes / total_comments for absolute volume context
+    Extract engagement signals using ONLY platform-reported data.
     """
     stats = scraped_data.get("stats") or {}
     posts = scraped_data.get("posts") or []
 
-    # ── Follower count: use robust resolver ──────────────────────────────────
+    # ── Followers: platform-reported ──────────────────────────────────────────
     followers = _resolve_followers(scraped_data)
 
-    avg_likes    = stats.get("avg_likes_per_post", 0) or 0
-    avg_comments = stats.get("avg_comments_per_post", 0) or 0
-    avg_shares   = stats.get("avg_shares_per_post", 0) or 0
-    total_angry  = stats.get("total_angry_reactions", 0) or 0
-    total_sad    = stats.get("total_sad_reactions", 0) or 0
-    post_count   = stats.get("post_count", len(posts)) or len(posts)
-    total_react  = max(stats.get("total_reactions", 1) or 1, 1)
+    # ── Post count: from profile header, NOT len(posts) ──────────────────────
+    post_count = (
+        scraped_data.get("post_count")
+        or scraped_data.get("postsCount")
+        or scraped_data.get("mediaCount")
+        or (scraped_data.get("edge_owner_to_timeline_media") or {}).get("count")
+        or stats.get("post_count")
+        or len(posts)
+    )
+    if post_count == len(posts) and len(posts) < 100:
+        logger.warning(
+            "post_count falling back to sample size (%d) — "
+            "profile scraper did not return a real total post count.",
+            len(posts),
+        )
 
-    # Compute engagement rate; fall back to stats-level value if followers=0
-    if followers > 0:
-        engagement_rate = (avg_likes + avg_comments) / followers
-    else:
-        # Stats-level engagement rate (TikTok often provides this directly)
-        engagement_rate = float(stats.get("engagement_rate") or
-                                scraped_data.get("engagement_rate") or 0)
+    # ── Engagement rate: ONLY platform-reported, never manually computed ──────
+    engagement_rate = float(
+        scraped_data.get("engagement_rate")
+        or scraped_data.get("engagementRate")
+        or stats.get("engagement_rate")
+        or 0
+    )
+
+    # ── Angry / sad ratio: within-sample proportions are valid ────────────────
+    total_react = max(stats.get("total_reactions", 0) or 0, 1)
+    total_angry = stats.get("total_angry_reactions", 0) or 0
+    total_sad   = stats.get("total_sad_reactions",   0) or 0
+    angry_ratio = round(total_angry / total_react, 4)
+    sad_ratio   = round(total_sad   / total_react, 4)
 
     return {
-        "followers":           followers,
-        "post_count":          post_count,
-        "avg_likes":           avg_likes,
-        "avg_comments":        avg_comments,
-        "avg_shares_per_post": round(avg_shares, 2),
-        "engagement_rate":     round(engagement_rate, 4),
-        "angry_ratio":         round(total_angry / total_react, 4),
-        "sad_ratio":           round(total_sad   / total_react, 4),
-        "has_website":         int(bool(scraped_data.get("website"))),
-        "has_phone":           int(bool(scraped_data.get("phone"))),
+        "followers":       followers,
+        "post_count":      int(post_count),
+        "engagement_rate": round(engagement_rate, 4),
+        "angry_ratio":     angry_ratio,
+        "sad_ratio":       sad_ratio,
+        "has_website":     int(bool(scraped_data.get("website"))),
+        "has_phone":       int(bool(scraped_data.get("phone"))),
     }
 
 
 def _derive_comment_sentiment_score(sentiment_result) -> float:
-    """
-    Convert sentiment analysis result → 0-1 float for the trust scorer.
-    """
     if sentiment_result is None:
         return 0.5
 
@@ -237,8 +270,11 @@ def _derive_comment_sentiment_score(sentiment_result) -> float:
 
 
 def _persist_scraped_signals(db: Session, seller: SellerProfile,
-                              engagement: dict, resolved_age: int | None):
-    """Write fresh scraped values back to DB so cached loads stay accurate."""
+                              engagement: dict, resolved_age: int | None,
+                              profile_photo_url: str | None = None):
+    """
+    FIX: also persist profile_photo_url when available.
+    """
     try:
         updated = False
 
@@ -254,6 +290,11 @@ def _persist_scraped_signals(db: Session, seller: SellerProfile,
 
         if resolved_age and not seller.account_age_days:
             seller.account_age_days = resolved_age
+            updated = True
+
+        # FIX: persist profile photo URL
+        if profile_photo_url and not getattr(seller, "profile_photo_url", None):
+            seller.profile_photo_url = profile_photo_url
             updated = True
 
         if updated:
@@ -272,10 +313,6 @@ def _run_full_sentiment_analysis(
     seller_profile_url: str,
     platform: str,
 ) -> tuple:
-    """
-    Run the full MARBERT/CAMeL sentiment pipeline on scraped comments.
-    Returns (SentimentResult | None, sentiment_score: float)
-    """
     from ai.sentiment.comment_sentiment import (
         analyze_sentiment,
         ScrapeResult,
@@ -318,7 +355,6 @@ def _run_full_sentiment_analysis(
 
 
 def _sentiment_result_to_dict(result) -> dict | None:
-    """Serialize SentimentResult to a JSON-safe dict for the API response."""
     if result is None:
         return None
     return {
@@ -340,22 +376,139 @@ def _sentiment_result_to_dict(result) -> dict | None:
     }
 
 
+# ── AI Image Analysis ─────────────────────────────────────────────────────────
+
+async def _download_image_temp(url: str) -> str | None:
+    """Download an image URL to a temp file. Returns local path or None on failure."""
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+
+            suffix = ".jpg"
+            ct = resp.headers.get("content-type", "")
+            if "png" in ct:
+                suffix = ".png"
+            elif "webp" in ct:
+                suffix = ".webp"
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+                f.write(resp.content)
+                return f.name
+    except Exception as exc:
+        logger.warning("Image download failed (%s): %s", url, exc)
+        return None
+
+
+async def _analyze_post_images(scraped_data: dict) -> dict:
+    """
+    Download and run AI-image detection on post images.
+    Checks up to 10 still images — videos and reels are skipped.
+
+    FIX: expanded field lookup to match new normalized post structure
+    (display_url, media_url, thumbnail_url added by scraping.py normalizer).
+    """
+    from ai.image_analyzer.fake_detector import check_image_authenticity
+
+    posts = scraped_data.get("posts") or []
+
+    result = {
+        "total_images_checked": 0,
+        "ai_generated_count":   0,
+        "uncertain_count":      0,
+        "ai_ratio":             0.0,
+        "flagged_posts":        [],
+    }
+
+    image_tasks: list[tuple[str, str]] = []
+    for post in posts:
+        post_type = (
+            post.get("type") or
+            post.get("media_type") or
+            post.get("product_type") or
+            ""
+        ).lower()
+        if "video" in post_type or "reel" in post_type:
+            continue
+
+        # FIX: extended field lookup — normalizer now populates display_url,
+        # media_url, thumbnail_url on all platforms
+        img_url = (
+            post.get("display_url") or
+            post.get("displayUrl") or
+            post.get("media_url") or
+            post.get("media_url") or
+            post.get("image_url") or
+            post.get("imageUrl") or
+            post.get("thumbnail_url") or
+            post.get("thumbnailUrl") or
+            post.get("full_picture") or
+            post.get("picture") or
+            # video URL is acceptable for thumbnail check when no still is available
+            (post.get("media_url") if not (
+                post.get("display_url") or post.get("displayUrl")
+            ) else None)
+        )
+
+        # skip video-only URLs (mp4 / m3u8)
+        if img_url and isinstance(img_url, str) and img_url.startswith("http"):
+            if any(img_url.lower().endswith(ext) for ext in (".mp4", ".m3u8", ".mov", ".avi")):
+                img_url = None
+
+        if img_url and isinstance(img_url, str) and img_url.startswith("http"):
+            post_url = post.get("post_url") or post.get("url") or post.get("link") or ""
+            image_tasks.append((img_url, post_url))
+
+    if not image_tasks:
+        logger.info("_analyze_post_images: no image URLs found in %d posts", len(posts))
+        return result
+
+    for img_url, post_url in image_tasks[:MAX_IMAGES_TO_ANALYZE]:
+        tmp_path = await _download_image_temp(img_url)
+        if not tmp_path:
+            continue
+
+        try:
+            analysis = check_image_authenticity(tmp_path)
+            result["total_images_checked"] += 1
+
+            if analysis.get("is_ai_generated"):
+                result["ai_generated_count"] += 1
+                result["flagged_posts"].append({
+                    "post_url":       post_url,
+                    "confidence":     analysis.get("confidence", 0.0),
+                    "verdict_arabic": analysis.get("verdict_arabic", ""),
+                    "reasons":        analysis.get("reasons", []),
+                })
+            elif analysis.get("is_uncertain"):
+                result["uncertain_count"] += 1
+
+        except Exception as exc:
+            logger.warning("Image analysis failed for %s: %s", img_url, exc)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    checked = result["total_images_checked"]
+    if checked > 0:
+        result["ai_ratio"] = round(result["ai_generated_count"] / checked, 4)
+
+    logger.info(
+        "Image analysis: %d checked, %d AI-flagged, %d uncertain (ratio=%.2f)",
+        result["total_images_checked"],
+        result["ai_generated_count"],
+        result["uncertain_count"],
+        result["ai_ratio"],
+    )
+
+    return result
+
+
 # ── Bonus cap helper ──────────────────────────────────────────────────────────
 
 def _post_bonus_cap(score: int, has_reviews: bool, has_age: bool, followers: int) -> int:
-    """
-    Re-enforce the data-richness cap after bonuses have been applied.
-
-    Caps mirror those in trust_score._blend_scores:
-      has reviews (≥5)     -> uncapped
-      no reviews + no age:
-        < 10k followers    -> 72
-        10k-50k followers  -> 75
-        50k+  followers    -> 78
-      no reviews + age known:
-        < 10k followers    -> 76
-        10k+ followers     -> 82
-    """
     if has_reviews:
         return score
 
@@ -380,7 +533,7 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     q = q.strip()
-    scraped_data = None
+    scraped_data    = None
     scrape_platform = None
 
     # ── 1. Try DB first ───────────────────────────────────────────────────────
@@ -393,7 +546,7 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
         .first()
     )
 
-    # ── 2. Scrape if: not found, stale, or forced ─────────────────────────────
+    # ── 2. Scrape if: not found / stale / incomplete / forced ─────────────────
     is_url = (
         q.startswith("http") or
         "instagram.com" in q or
@@ -435,13 +588,37 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
                     if scraped_data:
                         scrape_platform = platform
                         seller = create_analysis(db, q, platform, scraped_data)
+
+                        # FIX: persist profile_photo_url right after scrape
+                        # create_analysis may not handle this field — patch it here
+                        photo = scraped_data.get("profile_photo_url") or ""
+                        if photo and seller and not getattr(seller, "profile_photo_url", None):
+                            try:
+                                seller.profile_photo_url = photo
+                                db.add(seller)
+                                db.commit()
+                                db.refresh(seller)
+                            except Exception as exc:
+                                logger.warning("Could not persist profile_photo_url: %s", exc)
+                                db.rollback()
+
         except Exception as exc:
             logger.warning("Scrape-on-search failed: %s", exc)
 
     if not seller:
         return {
             "found": False, "seller": None, "trust_score": None,
-            "reports": [], "reviews": [], "avg_stars": None,
+            "sentiment_summary": None,
+            "image_analysis": {
+                "total_images_checked": 0,
+                "ai_generated_count": 0,
+                "uncertain_count": 0,
+                "ai_ratio": 0.0,
+                "flagged_posts": [],
+            },
+            "reports": [], "reviews": [],
+            "reports_summary": None, "reviews_summary": None,
+            "avg_stars": None,
         }
 
     # ── 3. Load DB relations ──────────────────────────────────────────────────
@@ -450,37 +627,67 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
     reviews   = db.query(Review).filter(Review.seller_id == seller.id).order_by(Review.created_at.desc()).all()
     avg_stars = round(sum(r.stars for r in reviews) / len(reviews), 1) if reviews else None
 
-    # ── 4. Resolve account age: DB → bio fallback ─────────────────────────────
+    # ── 4. Resolve account age: DB → bio → oldest post date ──────────────────
     resolved_age = seller.account_age_days
     if resolved_age is None and scraped_data:
         raw_bio = scraped_data.get("bio") or scraped_data.get("biography")
         bio = _coerce_str(raw_bio) if raw_bio else None
         resolved_age = _estimate_age_from_bio(bio)
 
-    # ── 5. Build engagement signals ───────────────────────────────────────────
+    # FIX: if still no age, estimate from oldest post in scraped sample
+    if resolved_age is None and scraped_data:
+        resolved_age = _estimate_age_from_posts(scraped_data)
+        if resolved_age:
+            logger.info(
+                "Estimated account age from oldest post: %d days for %s",
+                resolved_age, getattr(seller, "display_name", q),
+            )
+
+    # ── 5. Build engagement signals (platform-reported only) ──────────────────
     has_phone = any(c.contact_type.value == "phone"              for c in contacts)
     has_web   = any(c.contact_type.value in ("website", "other") for c in contacts)
 
     if scraped_data:
         engagement = _build_engagement_signals(scraped_data)
-        _persist_scraped_signals(db, seller, engagement, resolved_age)
 
-        # Log if followers were zero before fix but non-zero now
+        # FIX: extract profile_photo_url from scraped_data for persistence
+        scraped_photo = scraped_data.get("profile_photo_url") or ""
+
+        _persist_scraped_signals(
+            db, seller, engagement, resolved_age,
+            profile_photo_url=scraped_photo,  # FIX: pass photo to persister
+        )
+
         if engagement.get("followers", 0) > 0 and (getattr(seller, "followers", 0) or 0) == 0:
             logger.info(
                 "Resolved previously-zero followers for %s → %d",
                 seller.display_name, engagement["followers"],
             )
     else:
-        # Load from DB columns — never fall back to zeros
+        # Load from DB — only real platform-reported fields
         engagement = {
-            "followers":           getattr(seller, "followers",       None) or 0,
-            "engagement_rate":     getattr(seller, "engagement_rate", None) or 0,
-            "angry_ratio":         0.0,
-            "avg_shares_per_post": 0.0,
-            "has_website":         int(bool(has_web)),
-            "has_phone":           int(bool(has_phone)),
+            "followers":       getattr(seller, "followers",       None) or 0,
+            "post_count":      getattr(seller, "post_count",      None) or 0,
+            "engagement_rate": getattr(seller, "engagement_rate", None) or 0,
+            "angry_ratio":     0.0,
+            "sad_ratio":       0.0,
+            "has_website":     int(bool(has_web)),
+            "has_phone":       int(bool(has_phone)),
         }
+
+    # ── 5b. AI image analysis ─────────────────────────────────────────────────
+    image_analysis = {
+        "total_images_checked": 0,
+        "ai_generated_count":   0,
+        "uncertain_count":      0,
+        "ai_ratio":             0.0,
+        "flagged_posts":        [],
+    }
+    if scraped_data:
+        try:
+            image_analysis = await _analyze_post_images(scraped_data)
+        except Exception as exc:
+            logger.warning("Post image analysis failed entirely: %s", exc)
 
     # ── 6. Sentiment analysis ─────────────────────────────────────────────────
     sentiment_result_obj    = None
@@ -488,7 +695,12 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
     comment_sentiment_score = 0.5
 
     if scraped_data:
-        platform_name = (scrape_platform or "").replace("_page", "").replace("_profile", "").replace("_post", "")
+        platform_name = (
+            (scrape_platform or "")
+            .replace("_page", "")
+            .replace("_profile", "")
+            .replace("_post", "")
+        )
         if not platform_name:
             platform_name = seller.platform.value if seller.platform else "unknown"
 
@@ -515,14 +727,14 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
     # ── 7. Build trust signals ────────────────────────────────────────────────
     signals = {
         "account_age_days":        resolved_age,
-        "post_count":              seller.post_count,
+        "post_count":              engagement.get("post_count", 0),
         "followers":               engagement.get("followers", 0),
         "platform":                seller.platform.value,
         "has_phone_contact":       int(has_phone or bool(engagement.get("has_phone", 0))),
         "has_website":             int(has_web   or bool(engagement.get("has_website", 0))),
         "engagement_rate":         engagement.get("engagement_rate", 0),
         "angry_ratio":             engagement.get("angry_ratio", 0),
-        "avg_shares_per_post":     engagement.get("avg_shares_per_post", 0),
+        "ai_image_ratio":          image_analysis.get("ai_ratio", 0.0),
         "comment_sentiment_score": comment_sentiment_score,
         "reports": [
             {"scam_type": r.scam_type.value, "credibility_score": r.credibility_score}
@@ -533,35 +745,76 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
 
     trust = calculate_trust_score(signals)
 
-    # ── 8. Engagement bonus (follower-tier scaled) ────────────────────────────
+    # ── 8. Engagement bonus ───────────────────────────────────────────────────
     engagement_bonus = 0
-    eng_rate         = engagement.get("engagement_rate", 0)
-    angry_ratio      = engagement.get("angry_ratio", 0)
-    followers        = engagement.get("followers", 0)
+    eng_rate    = engagement.get("engagement_rate", 0)
+    angry_ratio = engagement.get("angry_ratio", 0)
+    followers   = engagement.get("followers", 0)
 
-    if followers >= 100_000:
-        plausible_ceiling = 0.05
-        bonus_scale       = 1.0
-    elif followers >= 10_000:
-        plausible_ceiling = 0.08
-        bonus_scale       = 0.75
-    else:
-        plausible_ceiling = 0.15
-        bonus_scale       = 0.5
+    if eng_rate > 0:
+        if followers >= 100_000:
+            plausible_ceiling = 0.05
+            bonus_scale       = 1.0
+        elif followers >= 10_000:
+            plausible_ceiling = 0.08
+            bonus_scale       = 0.75
+        else:
+            plausible_ceiling = 0.15
+            bonus_scale       = 0.5
 
-    eng_is_plausible = eng_rate <= plausible_ceiling
+        eng_is_plausible = eng_rate <= plausible_ceiling
 
-    if eng_is_plausible and eng_rate > 0.05 and not reports:
-        engagement_bonus = round(8 * bonus_scale)
-    elif eng_is_plausible and eng_rate > 0.02 and not reports:
-        engagement_bonus = round(4 * bonus_scale)
-    elif not eng_is_plausible:
-        engagement_bonus = -8
+        if eng_is_plausible and eng_rate > 0.05 and not reports:
+            engagement_bonus = round(8 * bonus_scale)
+        elif eng_is_plausible and eng_rate > 0.02 and not reports:
+            engagement_bonus = round(4 * bonus_scale)
+        elif not eng_is_plausible:
+            engagement_bonus = -8
 
     if angry_ratio > 0.1:
         engagement_bonus -= 10
 
-    # ── 8.5 Summarise reviews and reports for the response ────────────────────
+    # ── 8b. AI image penalty ──────────────────────────────────────────────────
+
+    ai_image_penalty = 0
+
+    ai_ratio   = image_analysis.get("ai_ratio", 0.0)
+    ai_checked = image_analysis.get("total_images_checked", 0)
+    ai_count   = image_analysis.get("ai_generated_count", 0)
+
+    confidence = min(ai_checked / 10, 1.0)
+    scaled_ratio = ai_ratio * confidence
+
+    if ai_checked == 0:
+        ai_image_penalty = 0
+
+    elif ai_checked < 3:
+        # weak sample → light penalty only if AI exists
+        if ai_count >= 1:
+            ai_image_penalty = -5
+
+    else:
+        # strong sample → confidence-weighted ratio logic
+        if scaled_ratio >= 0.6:
+            ai_image_penalty = -20
+        elif scaled_ratio >= 0.4:
+            ai_image_penalty = -12
+        elif scaled_ratio >= 0.2:
+            ai_image_penalty = -6
+        elif scaled_ratio > 0:
+            ai_image_penalty = -3
+
+
+    logger.info(
+        "AI penalty debug → checked=%d, ai_count=%d, ratio=%.2f, confidence=%.2f, scaled=%.2f, penalty=%d",
+        ai_checked,
+        ai_count,
+        ai_ratio,
+        confidence,
+        scaled_ratio,
+        ai_image_penalty,
+    )
+    # ── 8c. Summarise reviews and reports ─────────────────────────────────────
     reviews_summary = None
     reports_summary = None
 
@@ -590,14 +843,17 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
 
     try:
         verdict_result = generate_seller_verdict({
-            "display_name":     seller.display_name,
-            "account_age_days": resolved_age,
-            "post_count":       seller.post_count,
-            "followers":        engagement.get("followers", 0),
-            "engagement_rate":  engagement.get("engagement_rate", 0),
-            "has_website":      int(has_web),
-            "has_phone":        int(has_phone),
-            "trust_score":      trust.get("score", 0),
+            "display_name":      seller.display_name,
+            "account_age_days":  resolved_age,
+            "post_count":        engagement.get("post_count", 0),
+            "followers":         engagement.get("followers", 0),
+            "engagement_rate":   engagement.get("engagement_rate", 0),
+            "has_website":       int(has_web),
+            "has_phone":         int(has_phone),
+            "trust_score":       trust.get("score", 0),
+            "ai_image_ratio":    image_analysis.get("ai_ratio", 0.0),
+            "ai_images_checked": image_analysis.get("total_images_checked", 0),
+            "ai_images_flagged": image_analysis.get("ai_generated_count", 0),
             "reports": [
                 {
                     "scam_type":         r.scam_type.value,
@@ -620,7 +876,10 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
     # ── 10. Sentiment bonus ───────────────────────────────────────────────────
     sentiment_bonus = 0
     if sentiment_summary:
-        total_count = sentiment_summary.get("total_count", 0) or sentiment_summary.get("total_comments", 0)
+        total_count = (
+            sentiment_summary.get("total_count", 0) or
+            sentiment_summary.get("total_comments", 0)
+        )
         if total_count >= 5:
             hint = sentiment_summary.get("sentiment_hint", "mixed")
             if hint == "mostly_positive":
@@ -630,9 +889,11 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
             elif hint == "mostly_negative":
                 sentiment_bonus = -12
 
-    # ── 11. Apply bonuses, then re-enforce data-richness cap ──────────────────
+    # ── 11. Apply bonuses, enforce data-richness cap ──────────────────────────
     pre_bonus_score = trust["score"]
-    raw_score       = max(0, min(100, pre_bonus_score + engagement_bonus + sentiment_bonus))
+    raw_score = max(0, min(100,
+        pre_bonus_score + engagement_bonus + sentiment_bonus + ai_image_penalty
+    ))
 
     has_reviews_flag = len(reviews) >= 5
     has_age_flag     = resolved_age is not None
@@ -651,6 +912,9 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
 
     recommendation = trust["verdict"]
 
+    # FIX: refresh profile_photo_url from DB after potential persist
+    db.refresh(seller)
+
     # ── 12. Response ──────────────────────────────────────────────────────────
     return {
         "found": True,
@@ -659,9 +923,10 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
             "profile_url":       seller.profile_url,
             "platform":          seller.platform.value,
             "display_name":      seller.display_name,
-            "profile_photo_url": seller.profile_photo_url,
+            # FIX: read from DB after refresh so persisted photo is returned
+            "profile_photo_url": getattr(seller, "profile_photo_url", None) or scraped_data.get("profile_photo_url") if scraped_data else getattr(seller, "profile_photo_url", None),
             "account_age_days":  resolved_age,
-            "post_count":        seller.post_count,
+            "post_count":        engagement.get("post_count", 0),
             "category":          seller.category,
             "followers":         engagement.get("followers", 0),
             "engagement_rate":   engagement.get("engagement_rate", 0),
@@ -671,22 +936,24 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
             ],
         },
         "trust_score": {
-            "score":                  trust.get("score", 0),
-            "verdict_color":          trust.get("verdict_color", "grey"),
-            "verdict":                trust.get("verdict", ""),
-            "verdict_darija":         trust.get("verdict_darija", ""),
-            "verdict_narrative":      verdict_narrative,
-            "recommendation":         recommendation,
-            "model_used":             trust.get("model_used", ""),
-            "rule_based_score":       trust.get("rule_based_score", 0),
-            "engagement_bonus":       engagement_bonus,
-            "sentiment_bonus":        sentiment_bonus,
-            "pre_bonus_score":        pre_bonus_score,
-            "feature_values":         trust.get("feature_values", {}),
-            "reports_contribution":   trust.get("reports_contribution", "لا توجد بلاغات"),
-            "reviews_contribution":   trust.get("reviews_contribution", "لا توجد تقييمات بعد"),
+            "score":                trust.get("score", 0),
+            "verdict_color":        trust.get("verdict_color", "grey"),
+            "verdict":              trust.get("verdict", ""),
+            "verdict_darija":       trust.get("verdict_darija", ""),
+            "verdict_narrative":    verdict_narrative,
+            "recommendation":       recommendation,
+            "model_used":           trust.get("model_used", ""),
+            "rule_based_score":     trust.get("rule_based_score", 0),
+            "engagement_bonus":     engagement_bonus,
+            "sentiment_bonus":      sentiment_bonus,
+            "ai_image_penalty":     ai_image_penalty,
+            "pre_bonus_score":      pre_bonus_score,
+            "feature_values":       trust.get("feature_values", {}),
+            "reports_contribution": trust.get("reports_contribution", "لا توجد بلاغات"),
+            "reviews_contribution": trust.get("reviews_contribution", "لا توجد تقييمات بعد"),
         },
         "sentiment_summary": sentiment_summary,
+        "image_analysis":    image_analysis,
         "reports": [
             {
                 "id":                 str(r.id),
@@ -699,7 +966,7 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
             }
             for r in reports
         ],
-        "reports_summary":  reports_summary,
+        "reports_summary": reports_summary,
         "reviews": [
             {
                 "id":              str(r.id),
@@ -713,6 +980,6 @@ async def search(q: str, force_rescrape: bool = False, db: Session = Depends(get
             }
             for r in reviews
         ],
-        "reviews_summary":  reviews_summary,
-        "avg_stars": avg_stars,
+        "reviews_summary": reviews_summary,
+        "avg_stars":        avg_stars,
     }

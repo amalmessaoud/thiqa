@@ -1,0 +1,128 @@
+.home {
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 24px;
+  background: linear-gradient(180deg, #f0fdf8 0%, #ffffff 100%);
+  min-height: 100vh;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.hero-logo {
+  height: 53px;
+  margin-bottom: 16px;
+}
+
+.hero-subtitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #122040;
+  margin-bottom: 32px;
+}
+
+.report-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #B0E4CC;
+  border-radius: 14px;
+  padding: 20px 24px;
+  width: 500px;
+  max-width: 100%;
+  margin-bottom: 48px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(29, 158, 117, 0.06);
+  transition: border-color 0.2s;
+}
+
+.report-card:hover { border-color: #1D9E75; }
+
+.report-icon {
+  background: #f0fdf8;
+  border-radius: 10px;
+  padding: 12px;
+  color: #1D9E75;
+  flex-shrink: 0;
+}
+
+.report-text h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #122040;
+}
+
+.report-text p {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.tools {
+  width: 100%;
+  max-width: 860px;
+}
+
+.tools h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #122040;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.tool-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #B0E4CC;
+  border-radius: 14px;
+  padding: 20px 24px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(29, 158, 117, 0.06);
+  transition: border-color 0.2s;
+}
+
+.tool-card:hover { border-color: #1D9E75; }
+
+.tool-icon {
+  background: #f0fdf8;
+  border-radius: 10px;
+  padding: 12px;
+  color: #1D9E75;
+  flex-shrink: 0;
+}
+
+.tool-text h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #122040;
+}
+
+.tool-text p {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+}
+
+@media (max-width: 600px) {
+  .home { padding: 32px 16px; }
+  .tools-grid { grid-template-columns: 1fr; }
+  .report-card { width: 100%; }
+}

@@ -7,6 +7,7 @@ import uuid
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
+    full_name: Optional[str] = None 
 
     @field_validator("password")
     @classmethod
@@ -23,10 +24,12 @@ class AuthResponse(BaseModel):
     user_id: str
     token: str
     email: str
+    full_name: Optional[str] = None
 
 class MeResponse(BaseModel):
     id: str
     email: str
+    full_name: Optional[str] = None
     created_at: str
 
 # ── Analyze: Text ──────────────────────────────────────────────────────────────
@@ -110,34 +113,124 @@ class HistoryItem(BaseModel):
         from_attributes = True
 
 
+# ── Feedback Summary ──────────────────────────────────────────────────────────
 
-# ── Feedback Summary (Part 1) ─────────────────────────────────────────────────
- 
 class FeedbackSummaryRequest(BaseModel):
     seller_id: str
-    # Optional: pass feedbacks directly (for tests). If None, route loads from DB.
     feedbacks: Optional[list[str]] = None
- 
- 
+
 class FeedbackSummaryResponse(BaseModel):
     seller_id: str
     summary: str
     sentiment_hint: str        # "mostly_positive" | "mixed" | "mostly_negative"
     language_used: str         # "darija" | "arabic" | "french" | "mixed"
     total_count: int
- 
- 
-# ── AI Image Detector (Part 2) ────────────────────────────────────────────────
- 
+
+
+# ── AI Image Detector ─────────────────────────────────────────────────────────
+
 class ImageAuthenticityResponse(BaseModel):
     is_ai_generated: bool
-    confidence: float          # 0.0 – 1.0
+    confidence: float
     verdict_arabic: str
     reasons: list[str]
     safe_to_trust: bool
- 
- 
-# ── Sentiment Analysis (Part 3) ───────────────────────────────────────────────
+
+
+# ── Flagged Post (inside image analysis) ─────────────────────────────────────
+
+class FlaggedPostItem(BaseModel):
+    post_url: str
+    confidence: float
+    verdict_arabic: str
+    reasons: list[str]
+
+
+# ── Image Analysis Summary (returned in search response) ─────────────────────
+
+class ImageAnalysisSummary(BaseModel):
+    total_images_checked: int = 0
+    ai_generated_count: int = 0
+    uncertain_count: int = 0
+    ai_ratio: float = 0.0
+    flagged_posts: list[FlaggedPostItem] = []
+
+
+# ── Raw Engagement Stats ──────────────────────────────────────────────────────
+
+class RawEngagementStats(BaseModel):
+    total_likes: int = 0
+    total_comments: int = 0
+    total_shares: int = 0
+    avg_likes_per_post: float = 0.0
+    avg_comments_per_post: float = 0.0
+    avg_shares_per_post: float = 0.0
+    avg_reactions_per_post: float = 0.0
+
+
+# ── Seller Detail (inside search response) ────────────────────────────────────
+
+class SellerDetail(BaseModel):
+    id: str
+    profile_url: str
+    platform: str
+    display_name: Optional[str]
+    profile_photo_url: Optional[str]
+    account_age_days: Optional[int]
+    post_count: Optional[int]
+    category: Optional[str]
+    followers: int = 0
+    engagement_rate: float = 0.0
+    contacts: list[dict] = []
+    # Raw engagement stats
+    total_likes: int = 0
+    total_comments: int = 0
+    total_shares: int = 0
+    avg_reactions_per_post: float = 0.0
+
+    class Config:
+        from_attributes = True
+
+
+# ── Trust Score Detail (inside search response) ───────────────────────────────
+
+class TrustScoreDetail(BaseModel):
+    score: int
+    verdict_color: str
+    verdict: str
+    verdict_darija: str
+    verdict_narrative: str
+    recommendation: str
+    model_used: str
+    rule_based_score: int
+    engagement_bonus: int
+    sentiment_bonus: int
+    ai_image_penalty: int = 0
+    pre_bonus_score: int
+    feature_values: dict = {}
+    reports_contribution: str
+    reviews_contribution: str
+
+
+# ── Full Search Response ──────────────────────────────────────────────────────
+
+class SearchResponse(BaseModel):
+    found: bool
+    seller: Optional[SellerDetail]
+    trust_score: Optional[TrustScoreDetail]
+    sentiment_summary: Optional[dict]
+    image_analysis: ImageAnalysisSummary = ImageAnalysisSummary()
+    reports: list[dict] = []
+    reports_summary: Optional[str]
+    reviews: list[dict] = []
+    reviews_summary: Optional[str]
+    avg_stars: Optional[float]
+
+    class Config:
+        from_attributes = True
+
+
+# ── Sentiment Analysis ────────────────────────────────────────────────────────
 
 class CommentInput(BaseModel):
     text: str
@@ -165,8 +258,8 @@ class SentimentResponse(BaseModel):
     summary: str
     top_positive: list[str]
     top_negative: list[str]
-    
-    
+
+
 # ── Risk Classifier ───────────────────────────────────────────────────────────
 
 class SellerRiskRequest(BaseModel):
@@ -182,9 +275,9 @@ class SellerRiskRequest(BaseModel):
     posts_per_month:       Optional[float] = None
 
 class SellerRiskResponse(BaseModel):
-    risk_category:    str    # "legit" | "suspicious" | "high_risk"
+    risk_category:    str
     risk_probability: float
-    risk_class:       int    # 0 | 1 | 2
+    risk_class:       int
 
 
 # ── Category Classifier ───────────────────────────────────────────────────────
@@ -201,8 +294,8 @@ class SellerCategoryRequest(BaseModel):
 
 class SellerCategoryResponse(BaseModel):
     category: str
-    
-    
+
+
 # ── Trusted Seller Recommender ────────────────────────────────────────────────
 
 class TrustedSellerItem(BaseModel):
@@ -216,9 +309,9 @@ class TrustedSellerItem(BaseModel):
         from_attributes = True
 
 class ReportSubmitWithRecommendationsResponse(BaseModel):
-    success:          bool
-    report_id:        str
+    success:           bool
+    report_id:         str
     credibility_score: Optional[float]
     credibility_label: Optional[str]
-    message:          str
-    recommendations:  list[TrustedSellerItem]
+    message:           str
+    recommendations:   list[TrustedSellerItem]

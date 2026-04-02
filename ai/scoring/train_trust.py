@@ -122,8 +122,13 @@ def _build_features(seller, reports, reviews, contacts) -> list[float]:
     raw_eng  = float(getattr(seller, "engagement_rate", None) or 0)
     eng_rate = _sanitize_engagement_rate(raw_eng, followers)
 
-    sentiment = 0.5
-    angry     = 0.0
+    if reviews:
+        avg = sum(r.stars for r in reviews) / len(reviews)
+        sentiment = round((avg - 1) / 4.0, 4)   # 1–5 stars → 0.0–1.0
+        angry = round(sum(1 for r in reviews if r.stars == 1) / len(reviews), 4)
+    else:
+        sentiment = 0.5  # unknown
+        angry     = 0.0  # unknown
 
     return [
         age, posts, followers, ppm,

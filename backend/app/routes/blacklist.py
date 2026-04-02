@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query ,HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from app.db.crud import get_record
 
 from app.db.database import get_db
 from app.models.models import SellerProfile, Report, Platform, ScamType
@@ -84,3 +85,5 @@ def get_blacklist(
         "next":     f"?page={page+1}" if page < total_pages else None,
         "previous": f"?page={page-1}" if page > 1 else None,
     }
+
+
