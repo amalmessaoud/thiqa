@@ -5,8 +5,6 @@ import { thiqaApi } from "../api/thiqa";
 import PrimaryButton from "../components/PrimaryButton";
 import UploadBox from "../components/UploadBox";
 import ResultsPlaceholder from "../components/ResultsPlaceholder";
-import TrustScore from "../components/TrustScore";
-import AiVerdict from "../components/AiVerdict";
 
 export default function Analyze() {
   const [images, setImages] = useState([]);
@@ -23,13 +21,19 @@ export default function Analyze() {
   }
 
   async function handleAnalyze() {
-    if (images.length === 0) { setError("يرجى رفع صورة أولاً"); return; }
+    if (images.length === 0) {
+      setError("يرجى رفع صورة أولاً");
+      return;
+    }
     setError("");
     setLoading(true);
+    setResult(null);
+
     try {
-      const data = await thiqaApi.analyzeImage(images[0]);
+      const data = await thiqaApi.analyzeImage(images[0]); // file under "image"
       setResult(data);
     } catch (e) {
+      console.error(e);
       setError("حدث خطأ أثناء التحليل، حاول مرة أخرى");
     } finally {
       setLoading(false);
@@ -39,7 +43,10 @@ export default function Analyze() {
   return (
     <main className="analyze-page" dir="rtl">
       <div className="analyze-header">
-        <div className="analyze-header-icon" style={{ background: "#f0fdf8", color: "#1D9E75" }}>
+        <div
+          className="analyze-header-icon"
+          style={{ background: "#f0fdf8", color: "#1D9E75" }}
+        >
           <FiImage size={28} />
         </div>
         <h1>تحليل صور</h1>
@@ -59,19 +66,36 @@ export default function Analyze() {
 
       {result ? (
         <div className="analyze-results">
-          {result.trust_score && <TrustScore score={result.trust_score.score} />}
-          {result.verdict_narrative && <AiVerdict text={result.verdict_narrative} />}
-          {result.is_fake !== undefined && (
-            <div className={`analyze-verdict ${result.is_fake ? "fake" : "real"}`}>
-              {result.is_fake ? "⚠️ الصورة مشبوهة أو مزيفة" : "✅ الصورة تبدو أصلية"}
-            </div>
+          <h2 style={{ marginTop: "1rem" }}>نتائج التحليل</h2>
+
+          <div className="analyze-verdict" style={{ marginBottom: "1rem" }}>
+            {result.is_ai_generated
+              ? `⚠️ يُشير التحليل إلى أن الصورة محتملة أن تكون منشأة بواسطة الذكاء الاصطناعي بنسبة ثقة ${result.confidence * 100}%`
+              : "✅ الصورة تبدو أصلية"}
+          </div>
+
+          {result.verdict_arabic && (
+            <div className="analyze-verdict-text">{result.verdict_arabic}</div>
           )}
-          {result.verdict && (
-            <div className="analyze-verdict-text">{result.verdict}</div>
+
+          {result.reasons && result.reasons.length > 0 && (
+            <ul style={{ paddingInlineStart: "1.5rem", marginTop: "0.5rem" }}>
+              {result.reasons.map((r, idx) => (
+                <li key={idx}>{r}</li>
+              ))}
+            </ul>
           )}
+
+          <div style={{ marginTop: "0.5rem" }}>
+            {result.safe_to_trust
+              ? "الصورة آمنة للاعتماد"
+              : "⚠️ الصورة قد لا تكون آمنة للاعتماد"}
+          </div>
         </div>
       ) : (
-        !loading && <ResultsPlaceholder message='ارفع صورة واضغط "تحليل" لرؤية النتائج' />
+        !loading && (
+          <ResultsPlaceholder message='ارفع صورة واضغط "تحليل" لرؤية النتائج' />
+        )
       )}
     </main>
   );

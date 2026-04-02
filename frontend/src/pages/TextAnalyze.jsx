@@ -14,9 +14,10 @@ export default function TextAnalyze() {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
+  // Explicitly support multiple screenshots
   function handleImageChange(e) {
     if (e.target.files.length > 0) {
-      setImages(e.target.files);
+      setImages(Array.from(e.target.files)); // make sure it's an array
       setResult(null);
       setError("");
     }
@@ -24,12 +25,13 @@ export default function TextAnalyze() {
 
   async function handleAnalyze() {
     if (images.length === 0) {
-      setError("يرجى رفع صورة أولاً");
+      setError("يرجى رفع صورة واحدة على الأقل");
       return;
     }
     setError("");
     setLoading(true);
     try {
+      // thiqaApi.analyzeScreenshot accepts multiple files
       const data = await thiqaApi.analyzeScreenshot(images);
       setResult(data);
     } catch (e) {
@@ -49,33 +51,36 @@ export default function TextAnalyze() {
           <FiSearch size={28} />
         </div>
         <h1>تحليل النصوص والرسائل</h1>
-        <p>ارفع صورة لمحادثة أو اعلان للكشف عن البائعين المزيفين</p>
+        <p>ارفع صورة أو أكثر لمحادثة أو إعلان للكشف عن البائعين المزيفين</p>
       </div>
 
       <div className="analyze-card">
         <div className="analyze-card-title">
-          <FiFileText size={16} /> صورة النص أو المحادثة
+          <FiFileText size={16} /> صور النصوص أو المحادثات
         </div>
         <UploadBox
           images={images}
           onChange={handleImageChange}
-          hint="صورة محادثة من واتساب، إنستغرام، أو أي منصة"
+          multiple={true} // explicitly allow multiple uploads
+          hint="يمكنك رفع أكثر من صورة محادثة من واتساب، إنستغرام، أو أي منصة"
         />
         <div className="how-it-works">
           <p>
             <strong>كيف يعمل:</strong>
           </p>
-          <p>١. استخراج النص من الصورة</p>
-          <p>٢. تحليل النص بحثاً عن أنماط النصب</p>
+          <p>١. استخراج النص من جميع الصور المرفوعة</p>
+          <p>٢. تحليل النصوص بحثاً عن أنماط النصب</p>
         </div>
         {error && <div className="analyze-error">{error}</div>}
         <PrimaryButton fullWidth onClick={handleAnalyze}>
-          {loading ? "جاري التحليل..." : "تحليل"}
+          {loading ? "جاري التحليل..." : "تحليل جميع الصور"}
         </PrimaryButton>
       </div>
 
-      {result && (
+      {result ? (
         <div className="analyze-results">
+          <h2>نتائج التحليل</h2>
+
           {/* Extracted Text */}
           {result.extracted_text && (
             <div className="analyze-extracted">
@@ -88,8 +93,8 @@ export default function TextAnalyze() {
           <div className="analyze-info">
             <p>✅ الثقة: {(result.confidence * 100).toFixed(1)}%</p>
             <p>📝 عدد الكلمات: {result.word_count}</p>
-            <p>🖼️ الصور المعالجة: {result.images_processed}</p>
-            <p>⚠️ الصور الفاشلة: {result.images_failed}</p>
+            <p>🖼️ عدد الصور المعالجة: {result.images_processed}</p>
+            <p>⚠️ عدد الصور الفاشلة: {result.images_failed}</p>
           </div>
 
           {/* AI Verdict */}
@@ -98,7 +103,9 @@ export default function TextAnalyze() {
               <AiVerdict text={result.analysis.verdict_darija} />
 
               <div
-                className={`analyze-verdict ${result.analysis.safe_to_proceed ? "real" : "fake"}`}
+                className={`analyze-verdict ${
+                  result.analysis.safe_to_proceed ? "real" : "fake"
+                }`}
               >
                 {result.analysis.safe_to_proceed
                   ? "✅ المحادثة تبدو طبيعية"
@@ -124,6 +131,10 @@ export default function TextAnalyze() {
             </>
           )}
         </div>
+      ) : (
+        !loading && (
+          <ResultsPlaceholder message='ارفع صورة واحدة على الأقل واضغط "تحليل جميع الصور" لرؤية النتائج' />
+        )
       )}
     </main>
   );

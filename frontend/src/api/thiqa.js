@@ -34,10 +34,10 @@ export const thiqaApi = {
     return api.post("/analyze/screenshot/", form).then((r) => r.data);
   },
 
-  analyzeImage: (files) => {
+  analyzeImage: (file) => {
     const form = new FormData();
-    Array.from(files).forEach((file) => form.append("images", file));
-    return api.post("/analyze/image/", form).then((r) => r.data);
+    form.append("image", file); // MUST match the backend argument name
+    return api.post("/ai/analyze/image/", form).then((r) => r.data);
   },
 
   // Reports
