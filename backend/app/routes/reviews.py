@@ -66,20 +66,36 @@ class ReviewsListResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _detect_platform(profile_url: str) -> Platform:
+    """Detect platform enum from a profile URL."""
     if "instagram.com" in profile_url:
         return Platform.instagram
+    if "tiktok.com" in profile_url:
+        return Platform.tiktok
     return Platform.facebook
 
 
 def _upsert_seller(db: Session, profile_url: str) -> SellerProfile:
+    """
+    Find or create a SellerProfile by profile URL.
+
+    If the seller doesn't exist yet, a minimal stub record is created so that
+    reviews can be submitted immediately for any URL.  The stub will be fully
+    enriched (display_name, followers, photos, trust score, etc.) the next
+    time GET /search/ is called with the same URL — create_analysis() in
+    crud.py detects the existing row by profile_url and updates it in-place,
+    so all reviews linked to the stub's id remain correctly associated.
+    """
     seller = db.query(SellerProfile).filter(
         SellerProfile.profile_url == profile_url
     ).first()
 
     if not seller:
         seller = SellerProfile(
-            profile_url=profile_url,
-            platform=_detect_platform(profile_url),
+            id          = uuid.uuid4(),
+            profile_url = profile_url,
+            platform    = _detect_platform(profile_url),
+            # display_name, profile_photo_url, account_age_days, etc. left NULL
+            # — they will be populated on the first /search/ call.
         )
         db.add(seller)
         db.commit()
@@ -94,28 +110,28 @@ def _upsert_seller(db: Session, profile_url: str) -> SellerProfile:
 def submit_review(
     body: ReviewSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),   # auth required
+    current_user: User = Depends(get_current_user),
 ):
     seller = _upsert_seller(db, body.profile_url)
 
     review = Review(
-        seller_id=seller.id,
-        reviewer_id=current_user.id,
-        stars=body.stars,
-        comment=body.comment,
-        product_matched=body.product_matched,
-        responded_fast=body.responded_fast,
-        item_received=body.item_received,
-        would_buy_again=body.would_buy_again,
+        seller_id       = seller.id,
+        reviewer_id     = current_user.id,
+        stars           = body.stars,
+        comment         = body.comment,
+        product_matched = body.product_matched,
+        responded_fast  = body.responded_fast,
+        item_received   = body.item_received,
+        would_buy_again = body.would_buy_again,
     )
     db.add(review)
     db.commit()
     db.refresh(review)
 
     return ReviewSubmitResponse(
-        success=True,
-        review_id=str(review.id),
-        message="تم تسجيل تقييمك بنجاح",
+        success   = True,
+        review_id = str(review.id),
+        message   = "تم تسجيل تقييمك بنجاح",
     )
 
 
@@ -139,16 +155,16 @@ def get_reviews(seller_id: str, db: Session = Depends(get_db)):
     for r in reviews:
         reviewer = db.query(User).filter(User.id == r.reviewer_id).first()
         result.append(ReviewResponse(
-            id=str(r.id),
-            seller_id=str(r.seller_id),
-            stars=r.stars,
-            comment=r.comment,
-            product_matched=r.product_matched,
-            responded_fast=r.responded_fast,
-            item_received=r.item_received,
-            would_buy_again=r.would_buy_again,
-            reviewer_email=reviewer.email if reviewer else "unknown",
-            created_at=r.created_at.isoformat(),
+            id              = str(r.id),
+            seller_id       = str(r.seller_id),
+            stars           = r.stars,
+            comment         = r.comment,
+            product_matched = r.product_matched,
+            responded_fast  = r.responded_fast,
+            item_received   = r.item_received,
+            would_buy_again = r.would_buy_again,
+            reviewer_email  = reviewer.email if reviewer else "unknown",
+            created_at      = r.created_at.isoformat(),
         ))
 
     avg_stars = (
@@ -157,7 +173,7 @@ def get_reviews(seller_id: str, db: Session = Depends(get_db)):
     )
 
     return ReviewsListResponse(
-        reviews=result,
-        avg_stars=avg_stars,
-        total=len(result),
+        reviews   = result,
+        avg_stars = avg_stars,
+        total     = len(result),
     )

@@ -65,8 +65,8 @@ export default function Profile() {
   return (
     <main className="profile-page" dir="rtl">
       <div className="profile-user-card">
-        <div className="profile-avatar">{user?.name?.slice(0, 2) || "MA"}</div>
-        <p className="profile-name">{user?.name || "محمد أحمد"}</p>
+        <div className="profile-avatar">{initials}</div>
+        <p className="profile-name">{user?.email || "المستخدم"}</p>
       </div>
 
       <div className="profile-tabs">
@@ -84,7 +84,9 @@ export default function Profile() {
         </button>
       </div>
 
-      {tab === "reviews" && (
+      {loading && <p className="profile-loading">جاري التحميل...</p>}
+
+      {!loading && tab === "reviews" && (
         <div className="profile-section">
           <h2>سجل التقييمات</h2>
           {loading ? (
@@ -109,7 +111,7 @@ export default function Profile() {
         </div>
       )}
 
-      {tab === "reports" && (
+      {!loading && tab === "reports" && (
         <div className="profile-section">
           <h2>سجل التقارير</h2>
           {loading ? (

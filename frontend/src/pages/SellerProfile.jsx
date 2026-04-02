@@ -2,6 +2,7 @@ import "./SellerProfile.css";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FiFlag, FiStar, FiActivity } from "react-icons/fi";
+import { thiqaApi } from "../api/thiqa";
 import TrustScore from "../components/TrustScore";
 import SellerInfo from "../components/SellerInfo";
 import AiVerdict from "../components/AiVerdict";
@@ -10,58 +11,66 @@ import ReviewCard from "../components/ReviewCard";
 import PrimaryButton from "../components/PrimaryButton";
 import { thiqaApi } from "../api/thiqa";
 
-const MOCK = {
-  name: "seller.dz",
-  location: "الجزائر العاصمة",
-  score: 68,
-  verdict:
-    "الغالبية العظمى من التقييمات كانت إيجابية، حيث وصف المشترون تجربتهم بالجيدة والممتازة، وأشادوا بخدمة العملاء والشحن السريع والتغليف الجيد. هناك بعض التقييمات السلبية التي ذكرت مشاكل في الشحن والتأخير والجودة.",
-  phone: "0550123456",
-  username: "@sellerdz",
-  fbLink: "facebook.com/seller.page.dz",
-  fb: {
-    age: "6 أشهر",
-    posts: 78,
-    shipping: "متوسط",
-    lastActive: "قبل 3 أيام",
-    positive: "65%",
-    negative: "12%",
-  },
-  images: { original: 65, suspicious: 2, aiRisk: "منخفض" },
-  stats: { reports: 1, reviews: 18, transactions: 124 },
-  reviewsList: [
-    {
-      id: 1,
-      name: "محمد أحمد",
-      initials: "MA",
-      date: "2026-03-22",
-      rating: 4,
-      tags: ["أشتري مرة أخرى", "رد سريع", "وصل", "طابق الإعلان"],
-      comment: "البائع جيد، المنتج وصل لكن التغليف كان ضعيفاً قليلاً",
-    },
-  ],
-  reportsList: [
-    {
-      id: 1,
-      name: "مشتري مجهول",
-      date: "2026-02-10",
-      type: "جودة رديئة",
-      risk: "منخفض",
-      comment: "الجودة ما كانتش كيما توقعت، لكن البائع رد وحل المشكلة.",
-      proof: "https://picsum.photos/400/300",
-    },
-  ],
-};
+function formatAge(days) {
+  if (!days) return "غير معروف";
+  if (days < 30) return `${days} يوم`;
+  if (days < 365) return `${Math.floor(days / 30)} شهر`;
+  const years = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  if (months === 0) return `${years} سنة`;
+  return `${years} سنة و ${months} شهر`;
+}
 
 export default function SellerProfile() {
-  const { sellerId } = useParams(); // get seller id from URL
   console.log("Seller ID from URL:", sellerId);
-  const [seller, setSeller] = useState(null);
+
+  const navigate = useNavigate();
+  const { sellerId } = useParams();
+  const [tab, setTab] = useState("reviews");
+  const [data, setData] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const navigate = useNavigate();
-  const [tab, setTab] = useState("reviews");
+  useEffect(() => {
+    if (!sellerId) return;
+    setLoading(true);
+    thiqaApi
+      .search(decodeURIComponent(sellerId))
+      .then((result) => {
+        if (result?.found) {
+          setData(result);
+          setReviews(result.reviews || []);
+          setReports(result.reports || []);
+        } else {
+          setError("لم يتم العثور على البائع");
+        }
+      })
+      .catch(() => setError("حدث خطأ أثناء تحميل البيانات"))
+      .finally(() => setLoading(false));
+  }, [sellerId]);
+
+  if (loading)
+    return (
+      <main className="seller-page" dir="rtl">
+        <div className="seller-loading">جاري التحميل...</div>
+      </main>
+    );
+  if (error)
+    return (
+      <main className="seller-page" dir="rtl">
+        <div className="seller-error">{error}</div>
+      </main>
+    );
+  if (!data) return null;
+
+  const seller = data.seller;
+  const trust = data.trust_score;
+  const phone = seller?.contacts?.find((c) => c.type === "phone")?.value;
+  const fbLink =
+    seller?.contacts?.find((c) => c.type === "facebook")?.value ||
+    seller?.profile_url;
 
   useEffect(() => {
     if (!sellerId) return;
@@ -85,46 +94,34 @@ export default function SellerProfile() {
     <main className="seller-page" dir="rtl">
       <div className="seller-header">
         <div className="seller-header-left">
-          <h1>{seller?.name}</h1>
-          <p>📍 {seller?.location}</p>
+          <h1>{seller?.display_name || seller?.profile_url}</h1>
+          <p>📍 {seller?.platform || "facebook"}</p>
         </div>
-        <TrustScore score={seller?.score} />
+        <TrustScore score={trust?.score} />
       </div>
 
-      <AiVerdict text={seller?.verdict} />
+      {trust?.verdict_narrative && <AiVerdict text={trust.verdict_narrative} />}
 
       <SellerInfo
-        phone={seller?.phone}
-        username={seller?.username}
-        fbLink={seller?.fbLink}
+        phone={phone}
+        username={seller?.display_name}
+        fbLink={fbLink}
       />
 
       <div className="seller-card">
-        <h3>تحليل فيسبوك</h3>
+        <h3>تحليل الحساب</h3>
         <div className="seller-fb-rows">
           <div className="seller-fb-row">
-            <span>عمر الصفحة</span>
-            <span>{seller?.fb.age}</span>
+            <span>عمر الحساب</span>
+            <span>{formatAge(seller?.account_age_days)}</span>
           </div>
           <div className="seller-fb-row">
             <span>عدد المنشورات</span>
-            <span>{seller?.fb.posts}</span>
+            <span>{seller?.post_count}</span>
           </div>
           <div className="seller-fb-row">
-            <span>النشر</span>
-            <span>{seller?.fb.shipping}</span>
-          </div>
-          <div className="seller-fb-row">
-            <span>آخر نشاط</span>
-            <span>{seller?.fb.lastActive}</span>
-          </div>
-          <div className="seller-fb-row">
-            <span>تعليقات إيجابية</span>
-            <span className="positive">{seller?.fb.positive}</span>
-          </div>
-          <div className="seller-fb-row">
-            <span>تعليقات سلبية</span>
-            <span className="negative">{seller?.fb.negative}</span>
+            <span>المنصة</span>
+            <span>{seller?.platform}</span>
           </div>
         </div>
       </div>
@@ -132,36 +129,18 @@ export default function SellerProfile() {
       <div className="seller-stats">
         <div className="stat-box">
           <FiActivity size={22} color="#122040" />
-          <p className="stat-number">{seller?.stats.transactions}</p>
-          <p className="stat-label">معاملة</p>
+          <p className="stat-number">{reviews.length + reports.length}</p>
+          <p className="stat-label">تفاعل</p>
         </div>
         <div className="stat-box">
           <FiFlag size={22} color="#e53e3e" />
-          <p className="stat-number">{seller?.stats.reports}</p>
+          <p className="stat-number">{reports.length}</p>
           <p className="stat-label">تقرير نصب</p>
         </div>
         <div className="stat-box">
           <FiStar size={22} color="#1D9E75" />
-          <p className="stat-number">{seller?.stats.reviews}</p>
-          <p className="stat-label">تقييم إيجابي</p>
-        </div>
-      </div>
-
-      <div className="seller-card">
-        <h3>تحليل الصور</h3>
-        <div className="seller-fb-rows">
-          <div className="seller-fb-row">
-            <span>صور أصلية</span>
-            <span className="positive">{seller?.images.original}</span>
-          </div>
-          <div className="seller-fb-row">
-            <span>صور مشبوهة</span>
-            <span className="negative">{seller?.images.suspicious}</span>
-          </div>
-          <div className="seller-fb-row">
-            <span>خطر AI</span>
-            <span className="badge-low">منخفض</span>
-          </div>
+          <p className="stat-number">{reviews.length}</p>
+          <p className="stat-label">تقييم</p>
         </div>
       </div>
 
@@ -170,47 +149,51 @@ export default function SellerProfile() {
           className={`tab-btn ${tab === "reviews" ? "active" : ""}`}
           onClick={() => setTab("reviews")}
         >
-          التقييمات ({seller?.reviewsList.length})
+          التقييمات ({reviews.length})
         </button>
         <button
           className={`tab-btn ${tab === "reports" ? "active" : ""}`}
           onClick={() => setTab("reports")}
         >
-          التقارير ({seller?.reportsList.length})
+          التقارير ({reports.length})
         </button>
       </div>
 
       {tab === "reviews" && (
         <>
-          {seller?.reviewsList.map((r) => (
+          {reviews.length === 0 && (
+            <p className="no-data">لا توجد تقييمات بعد</p>
+          )}
+          {reviews.map((r, i) => (
             <ReviewCard
-              key={r.id}
-              name={r.name}
-              initials={r.initials}
-              date={r.date}
-              rating={r.rating}
-              tags={r.tags}
+              key={r.id || i}
+              name={r.reviewer_name || "مشتري"}
+              initials={r.reviewer_name?.slice(0, 2) || "م"}
+              date={r.created_at?.slice(0, 10)}
+              rating={r.stars || r.rating}
+              tags={r.tags || []}
               comment={r.comment}
             />
           ))}
-          <button className="load-more-btn">عرض المزيد من التقييمات</button>
         </>
       )}
 
       {tab === "reports" && (
         <>
-          {seller?.reportsList.map((r) => (
+          {reports.length === 0 && (
+            <p className="no-data">لا توجد تقارير بعد</p>
+          )}
+          {reports.map((r, i) => (
             <ReportCard
-              key={r.id}
-              name={r.name}
-              date={r.date}
-              type={r.type}
-              risk={r.risk}
-              comment={r.comment}
-              proof={r.proof}
+              key={r.id || i}
+              name="مشتري مجهول"
+              date={r.created_at?.slice(0, 10)}
+              type={r.scam_type}
+              risk={r.credibility_label || "غير محدد"}
+              comment={r.description}
+              proof={r.screenshot_url}
             />
           ))}
-          <button className="load-more-btn">عرض المزيد من التقارير</button>
         </>
       )}
 
@@ -225,7 +208,7 @@ export default function SellerProfile() {
         <PrimaryButton
           fullWidth
           variant="green"
-          onClick={() => navigate("/review/sellerdz")}
+          onClick={() => navigate(`/review/${sellerId}`)}
         >
           <FiStar size={16} /> ترك تقييم
         </PrimaryButton>

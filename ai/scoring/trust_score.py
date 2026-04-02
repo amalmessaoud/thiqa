@@ -5,6 +5,8 @@ Design goals:
 - GB model and rule-based scorer produce scores on the SAME 0-100 scale.
 - Scores are BLENDED intelligently based on data availability.
 - Rule-based acts as a transparent anchor, not a silent override.
+- engagement_rate == 0 means UNKNOWN (platform did not report it).
+  The scorer applies NO bonus and NO penalty for unknown data.
 - _score_to_verdict output is stable: (verdict, verdict_color, verdict_darija).
 
 Verdict bands (v4):
@@ -52,19 +54,12 @@ FEATURE_NAMES = [
 ]
 
 # ── Verdict thresholds ────────────────────────────────────────────────────────
-# Format: (min_score_inclusive, verdict, color, darija)
-# Five distinct bands for precision:
-#   80-100  trusted seller, top band
-#   65-79   generally trusted
-#   50-64   some doubts
-#   40-49   concerning signals
-#   0-39    avoid
 _SCORE_TO_VERDICT = [
-    (80, "موثوق",  "green",        "هذا البائع موثوق جداً ويمكن التعامل معه بثقة"),
-    (65, "تعامل",  "green",        "هذا البائع موثوق بشكل عام"),
-    (50, "احذر",   "yellow",       "هذا البائع فيه بعض الشكوك — تحقق قبل الشراء"),
-    (40, "احذر",   "orange",       "هذا البائع فيه علامات مقلقة — توخ الحذر الشديد"),
-    ( 0, "تجنب",   "red",          "تجنب هذا البائع، فيه علامات نصب"),
+    (80, "موثوق",  "green",  "هذا البائع موثوق جداً ويمكن التعامل معه بثقة"),
+    (65, "تعامل",  "green",  "هذا البائع موثوق بشكل عام"),
+    (50, "احذر",   "yellow", "هذا البائع فيه بعض الشكوك — تحقق قبل الشراء"),
+    (40, "احذر",   "orange", "هذا البائع فيه علامات مقلقة — توخ الحذر الشديد"),
+    ( 0, "تجنب",   "red",    "تجنب هذا البائع، فيه علامات نصب"),
 ]
 
 
@@ -74,14 +69,14 @@ def _sanitize_engagement_rate(eng_rate: float, followers: float) -> float:
     """
     Clamp engagement rates that are physically implausible for the follower tier.
 
-    Updated real-world ceilings (fashion/lifestyle niches, Instagram/TikTok 2024):
-      >500k followers  ->  ~1-4%    (ceiling 8%)
-      100k-500k        ->  ~3-8%    (ceiling 15%)
-      10k-100k         ->  ~4-10%   (ceiling 20%)
-      <10k             ->  ~5-15%   (ceiling 35%)
+    Only called when eng_rate > 0 (i.e. platform actually reported it).
+    0 is never passed here — it means unknown, not zero.
 
-    Note: TikTok naturally has higher engagement than Instagram/Facebook.
-    The ceilings above are deliberately generous to accommodate TikTok norms.
+    Real-world ceilings (generous to accommodate TikTok norms):
+      >500k followers  →  ceiling 8%
+      100k-500k        →  ceiling 15%
+      10k-100k         →  ceiling 20%
+      <10k             →  ceiling 35%
     """
     if followers >= 500_000:
         ceiling = 0.08
@@ -97,7 +92,6 @@ def _sanitize_engagement_rate(eng_rate: float, followers: float) -> float:
 # ── Feature extraction ────────────────────────────────────────────────────────
 
 def _extract_features(signals: dict) -> np.ndarray:
-    # FIX: None age → 0.0 (unknown = no credit)
     raw_age = signals.get("account_age_days")
     age     = float(raw_age) if raw_age is not None else 0.0
 
@@ -126,9 +120,11 @@ def _extract_features(signals: dict) -> np.ndarray:
     p_ig = int("instagram" in platform)
     p_tt = int("tiktok"    in platform)
 
-    from ai.scoring.trust_score import _sanitize_engagement_rate
-    raw_eng  = min(float(signals.get("engagement_rate", 0)), 1.0)
-    eng_rate = _sanitize_engagement_rate(raw_eng, followers)
+    # engagement_rate: 0 means unknown — pass as-is so the model sees 0
+    # The model was trained on real data where 0 also means unknown,
+    # so it will not hallucinate a penalty.
+    raw_eng  = float(signals.get("engagement_rate", 0))
+    eng_rate = _sanitize_engagement_rate(raw_eng, followers) if raw_eng > 0 else 0.0
 
     comment_sentiment = float(signals.get("comment_sentiment_score", 0.5))
     angry_ratio       = min(float(signals.get("angry_ratio", 0)), 1.0)
@@ -190,28 +186,35 @@ def _load_model():
 
 def _rule_based_score(signals: dict) -> float:
     """
-    Deterministic 0-100 scorer. Used as the blending anchor and standalone
-    fallback when the GB model is unavailable.
+    Deterministic 0-100 scorer.
+
+    Key principle: engagement_rate == 0 means the platform did not report it.
+    We treat it as UNKNOWN — no bonus, no penalty.
+    We never compute engagement_rate ourselves from scraped sample data.
     """
     score = 55.0
 
-    age       = float(signals.get("account_age_days") or 90)
+    age       = float(signals.get("account_age_days") or 0)
     posts     = float(signals.get("post_count") or 0)
     followers = float(signals.get("followers") or 0)
     raw_eng   = float(signals.get("engagement_rate") or 0)
-    eng       = _sanitize_engagement_rate(raw_eng, followers)
+    # Only sanitize if we actually have a platform-reported value
+    eng       = _sanitize_engagement_rate(raw_eng, followers) if raw_eng > 0 else 0.0
     angry     = float(signals.get("angry_ratio") or 0)
     sentiment = float(signals.get("comment_sentiment_score") or 0.5)
     reports   = signals.get("reports", [])
     reviews   = signals.get("reviews", [])
+    ai_ratio  = float(signals.get("ai_image_ratio") or 0)
 
     # ── Account age ───────────────────────────────────────────────────────────
-    if   age >= 365 * 3: score += 15
-    elif age >= 365 * 2: score += 12
-    elif age >= 365:     score += 7
-    elif age >= 180:     score += 3
-    elif age >= 90:      score += 1
-    elif age <  30:      score -= 15
+    # age == 0 means unknown (not "account created today") — no penalty
+    if age > 0:
+        if   age >= 365 * 3: score += 15
+        elif age >= 365 * 2: score += 12
+        elif age >= 365:     score += 7
+        elif age >= 180:     score += 3
+        elif age >= 90:      score += 1
+        elif age <  30:      score -= 15
 
     # ── Post count ────────────────────────────────────────────────────────────
     if   posts >= 500: score += 8
@@ -220,7 +223,7 @@ def _rule_based_score(signals: dict) -> float:
     elif posts >= 30:  score += 3
     elif posts <  5:   score -= 8
 
-    # ── Followers — tiered with a top-tier premium ────────────────────────────
+    # ── Followers ─────────────────────────────────────────────────────────────
     if   followers >= 500_000: score += 14
     elif followers >= 100_000: score += 10
     elif followers >= 50_000:  score += 8
@@ -228,12 +231,12 @@ def _rule_based_score(signals: dict) -> float:
     elif followers >= 1_000:   score += 3
     elif 0 < followers < 100:  score -= 5
 
-    # ── Contact info — only penalise when combined with other risk signals ────
-    has_phone   = bool(signals.get("has_phone_contact"))
-    has_web     = bool(signals.get("has_website"))
-    no_contact  = not has_phone and not has_web
-    is_new      = age < 90
-    no_reviews  = len(reviews) == 0
+    # ── Contact info ──────────────────────────────────────────────────────────
+    has_phone  = bool(signals.get("has_phone_contact"))
+    has_web    = bool(signals.get("has_website"))
+    no_contact = not has_phone and not has_web
+    is_new     = age > 0 and age < 90
+    no_reviews = len(reviews) == 0
     has_reports = len(reports) > 0
 
     if no_contact:
@@ -245,46 +248,52 @@ def _rule_based_score(signals: dict) -> float:
     if has_phone: score += 4
     if has_web:   score += 6
 
-    # ── Engagement rate (tier-adjusted, already sanitized above) ──────────────
-    if followers >= 100_000:
-        if   eng > 0.06:  score += 8
-        elif eng > 0.03:  score += 5
-        elif eng > 0.01:  score += 2
-        elif eng > 0.005: score += 0
-        elif eng > 0:     score -= 3
-        else:             score -= 6
-    elif followers >= 10_000:
-        if   eng > 0.08: score += 8
-        elif eng > 0.04: score += 5
-        elif eng > 0.01: score += 2
-        elif eng > 0:    score -= 2
-        else:            score -= 5
-    else:
-        if   eng > 0.10: score += 10
-        elif eng > 0.05: score += 6
-        elif eng > 0.01: score += 2
-        elif eng > 0:    score -= 2
-        else:            score -= 3
-
-    # ── Shares signal (TikTok / Facebook) — high shares = viral = credible ───
-    avg_shares = float(signals.get("avg_shares_per_post") or 0)
-    if avg_shares > 500:  score += 6
-    elif avg_shares > 100: score += 3
-    elif avg_shares > 20:  score += 1
+    # ── Engagement rate ───────────────────────────────────────────────────────
+    # eng == 0 means UNKNOWN — apply no bonus and no penalty.
+    # We only score this when the platform itself reported a real value.
+    if eng > 0:
+        if followers >= 100_000:
+            if   eng > 0.06:  score += 8
+            elif eng > 0.03:  score += 5
+            elif eng > 0.01:  score += 2
+            elif eng > 0.005: score += 0
+            else:             score -= 3
+        elif followers >= 10_000:
+            if   eng > 0.08: score += 8
+            elif eng > 0.04: score += 5
+            elif eng > 0.01: score += 2
+            elif eng > 0:    score -= 2
+            else:            score -= 5
+        else:
+            if   eng > 0.10: score += 10
+            elif eng > 0.05: score += 6
+            elif eng > 0.01: score += 2
+            elif eng > 0:    score -= 2
+            else:            score -= 3
+    # else: eng == 0 → unknown → no change
 
     # ── Angry reactions ───────────────────────────────────────────────────────
     if   angry > 0.15: score -= 15
     elif angry > 0.05: score -= 5
 
-    # ── Comment sentiment (range: -8 ... +8) ──────────────────────────────────
+    # ── Comment sentiment (range: -8 … +8) ────────────────────────────────────
     score += (sentiment - 0.5) * 16
 
-    # ── Reports — each report subtracts 15 × credibility_score ───────────────
+    # ── AI image ratio ────────────────────────────────────────────────────────
+    # ai_ratio == 0 means either no images checked or none flagged — no penalty
+    if ai_ratio >= 0.7:
+        score -= 18
+    elif ai_ratio >= 0.4:
+        score -= 10
+    elif ai_ratio >= 0.2:
+        score -= 5
+
+    # ── Reports ───────────────────────────────────────────────────────────────
     for r in reports:
         cred   = float(r.get("credibility_score") or 0.5)
         score -= 15 * cred
 
-    # ── Reviews — shift by (avg_stars - 3) × 6 ───────────────────────────────
+    # ── Reviews ───────────────────────────────────────────────────────────────
     if reviews:
         avg    = sum(r.get("stars", 3) for r in reviews) / len(reviews)
         score += (avg - 3) * 6
@@ -300,9 +309,9 @@ def _proba_to_score(proba: np.ndarray, classes: list) -> float:
     Convert class probabilities to a 0-100 trust score.
 
     Mapping:
-      class 0 (legit)      -> 100
-      class 1 (suspicious) ->  45
-      class 2 (high_risk)  ->   5
+      class 0 (legit)      → 100
+      class 1 (suspicious) →  45
+      class 2 (high_risk)  →   5
     """
     idx     = {cls: i for i, cls in enumerate(classes)}
     p_legit = float(proba[idx[0]]) if 0 in idx else 0.0
@@ -317,25 +326,20 @@ def _proba_to_score(proba: np.ndarray, classes: list) -> float:
 
 def _blend_scores_PATCHED(gb_score: float, rule_score: float, signals: dict) -> tuple[float, str]:
     """
-    Blend GB and rule-based scores with (GB + rule) / 2 as the hard ceiling.
+    Blend GB and rule-based scores. GB weight is always ≤ 0.50.
 
-    gb_weight is ALWAYS ≤ 0.50 — meaning the blend can never give GB more
-    than equal say.
-
-    Blend tiers (data richness aware):
+    Blend tiers (data richness):
       rich  → GB 50% / rule 50%   (≥5 reviews AND known age)
       some  → GB 40% / rule 60%   (≥5 reviews OR known age)
       thin  → GB 33% / rule 67%   (1-4 reviews, or only age known)
       bare  → GB 25% / rule 75%   (no reviews, unknown age)
 
-    Post-blend caps (follower-tier aware):
-      no reviews:
-        unknown age + <10k  followers → max 72
-        unknown age + 10-50k          → max 75
-        unknown age + 50k+            → max 78
-        known age   + <10k  followers → max 76
-        known age   + 10k+            → max 82
-      ≥5 reviews → uncapped
+    Post-blend caps (no reviews):
+      unknown age + <10k  followers → max 72
+      unknown age + 10-50k          → max 75
+      unknown age + 50k+            → max 78
+      known age   + <10k  followers → max 76
+      known age   + 10k+            → max 82
     """
     review_count = len(signals.get("reviews", []))
     has_reviews  = review_count >= 5
@@ -343,23 +347,21 @@ def _blend_scores_PATCHED(gb_score: float, rule_score: float, signals: dict) -> 
     has_age      = signals.get("account_age_days") is not None
     followers    = float(signals.get("followers", 0))
 
-    # ── Blend weight (hard ceiling: GB ≤ 0.50) ────────────────────────────────
     if has_reviews and has_age:
-        gb_weight   = 0.50
-        tier_label  = "rich"
+        gb_weight  = 0.50
+        tier_label = "rich"
     elif has_reviews or has_age:
-        gb_weight   = 0.40
-        tier_label  = "some"
+        gb_weight  = 0.40
+        tier_label = "some"
     elif thin_reviews or has_age:
-        gb_weight   = 0.33
-        tier_label  = "thin"
+        gb_weight  = 0.33
+        tier_label = "thin"
     else:
-        gb_weight   = 0.25
-        tier_label  = "bare"
+        gb_weight  = 0.25
+        tier_label = "bare"
 
     blended = gb_score * gb_weight + rule_score * (1.0 - gb_weight)
 
-    # ── Post-blend cap (second defence layer) ─────────────────────────────────
     if not has_reviews:
         if not has_age:
             if followers < 10_000:
@@ -441,12 +443,12 @@ def calculate_trust_score(signals: dict) -> dict:
     score_int = int(round(trust_score))
     verdict, verdict_color, verdict_darija = _score_to_verdict(score_int)
 
-    # ── Summarise report and review contributions for API transparency ─────────
+    # ── Summarise report and review contributions ──────────────────────────────
     reports = signals.get("reports", [])
     reviews = signals.get("reviews", [])
 
     if reports:
-        avg_cred = sum(r.get("credibility_score") or 0.5 for r in reports) / len(reports)
+        avg_cred        = sum(r.get("credibility_score") or 0.5 for r in reports) / len(reports)
         total_deduction = sum(15 * (r.get("credibility_score") or 0.5) for r in reports)
         reports_contribution = (
             f"{len(reports)} بلاغ — متوسط المصداقية {round(avg_cred, 2)} "
@@ -456,9 +458,9 @@ def calculate_trust_score(signals: dict) -> dict:
         reports_contribution = "لا توجد بلاغات"
 
     if reviews:
-        avg_stars = sum(r.get("stars", 3) for r in reviews) / len(reviews)
+        avg_stars  = sum(r.get("stars", 3) for r in reviews) / len(reviews)
         star_delta = round((avg_stars - 3) * 6, 1)
-        sign = "+" if star_delta >= 0 else ""
+        sign       = "+" if star_delta >= 0 else ""
         reviews_contribution = (
             f"{len(reviews)} تقييم — متوسط {round(avg_stars, 1)}/5 نجوم "
             f"({sign}{star_delta} نقطة)"
@@ -467,13 +469,13 @@ def calculate_trust_score(signals: dict) -> dict:
         reviews_contribution = "لا توجد تقييمات بعد"
 
     return {
-        "score":                  score_int,
-        "verdict":                verdict,
-        "verdict_color":          verdict_color,
-        "verdict_darija":         verdict_darija,
-        "model_used":             model_used,
-        "rule_based_score":       int(round(rule_score)),
-        "feature_values":         dict(zip(FEATURE_NAMES, feats[0].tolist())),
-        "reports_contribution":   reports_contribution,
-        "reviews_contribution":   reviews_contribution,
+        "score":                score_int,
+        "verdict":              verdict,
+        "verdict_color":        verdict_color,
+        "verdict_darija":       verdict_darija,
+        "model_used":           model_used,
+        "rule_based_score":     int(round(rule_score)),
+        "feature_values":       dict(zip(FEATURE_NAMES, feats[0].tolist())),
+        "reports_contribution": reports_contribution,
+        "reviews_contribution": reviews_contribution,
     }

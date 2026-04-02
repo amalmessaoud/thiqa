@@ -9,25 +9,25 @@ import TrustScore from "../components/TrustScore";
 import AiVerdict from "../components/AiVerdict";
 
 export default function Analyze() {
-  const [image, setImage] = useState(null);
+  const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
   function handleImageChange(e) {
-    if (e.target.files[0]) {
-      setImage(e.target.files[0]);
+    if (e.target.files.length > 0) {
+      setImages(e.target.files);
       setResult(null);
       setError("");
     }
   }
 
   async function handleAnalyze() {
-    if (!image) { setError("يرجى رفع صورة أولاً"); return; }
+    if (images.length === 0) { setError("يرجى رفع صورة أولاً"); return; }
     setError("");
     setLoading(true);
     try {
-      const data = await thiqaApi.analyzeImage(image);
+      const data = await thiqaApi.analyzeImage(images[0]);
       setResult(data);
     } catch (e) {
       setError("حدث خطأ أثناء التحليل، حاول مرة أخرى");
@@ -50,14 +50,13 @@ export default function Analyze() {
         <div className="analyze-card-title">
           <FiUpload size={16} /> رفع الصورة
         </div>
-        <UploadBox image={image} onChange={handleImageChange} />
+        <UploadBox images={images} onChange={handleImageChange} />
         {error && <div className="analyze-error">{error}</div>}
         <PrimaryButton fullWidth onClick={handleAnalyze}>
           {loading ? "جاري التحليل..." : "تحليل"}
         </PrimaryButton>
       </div>
 
-      {/* Results */}
       {result ? (
         <div className="analyze-results">
           {result.trust_score && <TrustScore score={result.trust_score.score} />}

@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routes import scrape
 from app.routes import ai_features
 from app.routes import buyer_history
-from app.routes import auth, search, analyze, reports, reviews, blacklist
+from app.routes import auth, search, analyze, reports, reviews, blacklist , seller
 
 app = FastAPI(title="Thiqa API", version="1.0.0")
 
@@ -37,6 +37,7 @@ app.include_router(blacklist.router,     prefix="/api/blacklist", tags=["blackli
 app.include_router(scrape.router,        prefix="/api/scrape",    tags=["scrape"])
 app.include_router(ai_features.router,   prefix="/api/ai",        tags=["ai"])
 app.include_router(buyer_history.router, prefix="/api/history",   tags=["history"])
+app.include_router(seller.router,        prefix="/api/seller",    tags=["seller"])
 
 app.mount("/media", StaticFiles(directory="media"), name="media")
 

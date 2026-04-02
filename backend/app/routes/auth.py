@@ -69,13 +69,19 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=body.email,
         password_hash=hash_password(body.password),
+        full_name=body.full_name, 
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
     token = create_token(str(user.id), user.email)
-    return AuthResponse(user_id=str(user.id), token=token, email=user.email)
+    return AuthResponse(
+        user_id=str(user.id),
+        token=token,
+        email=user.email,
+        full_name=user.full_name  # ✅ (if your schema supports it)
+    )
 
 
 @router.post("/login/", response_model=AuthResponse)
@@ -85,7 +91,12 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_token(str(user.id), user.email)
-    return AuthResponse(user_id=str(user.id), token=token, email=user.email)
+    return AuthResponse(
+        user_id=str(user.id),
+        token=token,
+        email=user.email,
+        full_name=user.full_name  # ✅
+)
 
 
 @router.post("/logout/")
@@ -99,5 +110,6 @@ def me(current_user: User = Depends(get_current_user)):
     return MeResponse(
         id=str(current_user.id),
         email=current_user.email,
+        full_name=current_user.full_name,
         created_at=current_user.created_at.isoformat(),
     )

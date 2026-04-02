@@ -4,8 +4,9 @@ app/routes/reports.py
 Report submission endpoint.
 Changes vs original:
   • seller_id replaced by seller_url — caller passes the profile URL instead
-    of an internal UUID.  The seller must already exist in the DB (created by
-    a prior scrape/search).
+    of an internal UUID.  The seller is created as a stub if not yet in DB,
+    so reports can be submitted for any URL immediately.  The stub will be
+    enriched the next time /search/ is called with the same URL.
   • screenshot uploaded as a real multipart file from the user's PC; the file
     is saved to disk under  media/screenshots/  and the relative URL is stored.
   • After a successful report, returns trusted seller recommendations from the
@@ -14,7 +15,6 @@ Changes vs original:
 
 import os
 import uuid
-import shutil
 import logging
 from pathlib import Path
 from typing import Optional
@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.models import Report, SellerProfile, ScamType
+from app.models.models import Report, SellerProfile, ScamType, Platform
 from app.schemas.schemas import ReportSubmitWithRecommendationsResponse, TrustedSellerItem
 from app.routes.auth import get_current_user
 from ai.scoring.recommender import get_trusted_alternatives
@@ -32,9 +32,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ── Screenshot storage config ─────────────────────────────────────────────────
-# Screenshots are saved in  <project_root>/media/screenshots/
-# Adjust SCREENSHOT_DIR to wherever your static files are served from.
-
 SCREENSHOT_DIR = Path("media") / "screenshots"
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -56,7 +53,6 @@ def _save_screenshot(file: UploadFile) -> str:
             detail=f"Invalid file type '{file.content_type}'. Allowed: JPEG, PNG, WebP, GIF.",
         )
 
-    # Read into memory to check size
     contents = file.file.read()
     if len(contents) > MAX_SCREENSHOT_SIZE:
         raise HTTPException(
@@ -74,24 +70,49 @@ def _save_screenshot(file: UploadFile) -> str:
     return f"/media/screenshots/{filename}"
 
 
-def _lookup_seller_by_url(db: Session, seller_url: str) -> SellerProfile:
+def _detect_platform(url: str) -> Platform:
+    """Detect platform enum from a profile URL."""
+    if "instagram.com" in url:
+        return Platform.instagram
+    if "tiktok.com" in url:
+        return Platform.tiktok
+    return Platform.facebook
+
+
+def _lookup_or_create_seller(db: Session, seller_url: str) -> SellerProfile:
     """
-    Find a SellerProfile by profile URL (partial match, same as the search
-    endpoint uses).  Raises 404 if not found.
+    Find or create a SellerProfile by profile URL.
+
+    If the seller doesn't exist yet, a minimal stub record is created so that
+    reports can be submitted immediately for any URL.  The stub will be fully
+    enriched (display_name, followers, photos, trust score, etc.) the next
+    time GET /search/ is called with the same URL — create_analysis() in
+    crud.py detects the existing row by profile_url and updates it in-place,
+    so all reports linked to the stub's id remain correctly associated.
     """
+    url = seller_url.strip()
+
     seller = (
         db.query(SellerProfile)
-        .filter(SellerProfile.profile_url.ilike(f"%{seller_url.strip()}%"))
+        .filter(SellerProfile.profile_url.ilike(f"%{url}%"))
         .first()
     )
-    if not seller:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Seller not found. Make sure the profile has been searched/scraped "
-                "at least once before submitting a report."
-            ),
-        )
+
+    if seller:
+        return seller
+
+    # ── Create a minimal stub ─────────────────────────────────────────────
+    seller = SellerProfile(
+        id          = uuid.uuid4(),
+        profile_url = url,
+        platform    = _detect_platform(url),
+        # display_name, profile_photo_url, account_age_days, etc. left NULL
+        # — they will be populated on the first /search/ call.
+    )
+    db.add(seller)
+    db.commit()
+    db.refresh(seller)
+    logger.info("Created stub seller profile for %s (id=%s)", url, seller.id)
     return seller
 
 
@@ -99,19 +120,17 @@ def _lookup_seller_by_url(db: Session, seller_url: str) -> SellerProfile:
 
 @router.post("/reports/", response_model=ReportSubmitWithRecommendationsResponse)
 async def submit_report(
-    # ── Seller identified by profile URL, not internal UUID ──────────────
     seller_url:  str           = Form(...,  description="Facebook / Instagram / TikTok profile URL"),
     scam_type:   str           = Form(...),
     description: Optional[str] = Form(None),
-    # ── Screenshot uploaded as a file from the user's PC ─────────────────
     screenshot:  UploadFile    = File(...,  description="Screenshot image (JPEG / PNG / WebP, max 10 MB)"),
     db:          Session       = Depends(get_db),
     current_user               = Depends(get_current_user),
 ):
-    # ── 1. Resolve seller by URL ───────────────────────────────────────────
-    seller = _lookup_seller_by_url(db, seller_url)
+    # ── 1. Resolve or create seller by URL ────────────────────────────────
+    seller = _lookup_or_create_seller(db, seller_url)
 
-    # ── 2. Validate scam_type ──────────────────────────────────────────────
+    # ── 2. Validate scam_type ─────────────────────────────────────────────
     valid_types = {e.value for e in ScamType}
     if scam_type not in valid_types:
         raise HTTPException(
@@ -122,7 +141,7 @@ async def submit_report(
     # ── 3. Save screenshot ────────────────────────────────────────────────
     screenshot_url = _save_screenshot(screenshot)
 
-    # ── 4. AI credibility scoring ──────────────────────────────────────────
+    # ── 4. AI credibility scoring ─────────────────────────────────────────
     credibility_score  = None
     credibility_label  = None
     credibility_reason = None
@@ -142,7 +161,7 @@ async def submit_report(
         except Exception as exc:
             logger.warning("Credibility scoring failed: %s", exc)
 
-    # ── 5. Persist report ──────────────────────────────────────────────────
+    # ── 5. Persist report ─────────────────────────────────────────────────
     report = Report(
         seller_id          = seller.id,
         reporter_id        = current_user.id,
@@ -172,7 +191,7 @@ async def submit_report(
     db.commit()
     db.refresh(report)
 
-    # ── 7. Trusted seller recommendations ─────────────────────────────────
+    # ── 7. Trusted seller recommendations ────────────────────────────────
     recommendations = get_trusted_alternatives(
         db=db,
         category=seller.category,
@@ -193,7 +212,14 @@ async def submit_report(
 @router.get("/reports/")
 def get_reports(seller_url: str, db: Session = Depends(get_db)):
     """Return all reports for a seller identified by profile URL."""
-    seller = _lookup_seller_by_url(db, seller_url)
+    url = seller_url.strip()
+    seller = (
+        db.query(SellerProfile)
+        .filter(SellerProfile.profile_url.ilike(f"%{url}%"))
+        .first()
+    )
+    if not seller:
+        raise HTTPException(status_code=404, detail="Seller not found")
 
     reports = (
         db.query(Report)
