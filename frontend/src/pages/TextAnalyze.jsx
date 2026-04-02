@@ -27,7 +27,7 @@ export default function TextAnalyze() {
     setError("");
     setLoading(true);
     try {
-      const data = await thiqaApi.analyzeScreenshot(images[0]);
+      const data = await thiqaApi.analyzeScreenshot(images);
       setResult(data);
     } catch (e) {
       setError("حدث خطأ أثناء التحليل، حاول مرة أخرى");
