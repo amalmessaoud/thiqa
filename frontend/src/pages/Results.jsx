@@ -1,7 +1,14 @@
 import "./Results.css";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { FiAlertTriangle, FiImage, FiFileText, FiEye, FiPhone, FiLink } from "react-icons/fi";
+import {
+  FiAlertTriangle,
+  FiImage,
+  FiFileText,
+  FiEye,
+  FiPhone,
+  FiLink,
+} from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import { thiqaApi } from "../api/thiqa";
 import SearchBar from "../components/SearchBar";
@@ -25,7 +32,8 @@ export default function Results() {
     if (!query) return;
     setLoading(true);
     setError("");
-    thiqaApi.search(query)
+    thiqaApi
+      .search(query)
       .then((data) => setResult(data))
       .catch(() => setError("حدث خطأ أثناء البحث، حاول مرة أخرى"))
       .finally(() => setLoading(false));
@@ -39,8 +47,10 @@ export default function Results() {
   const fbLink = seller?.contacts?.find((c) => c.type === "facebook")?.value;
 
   function handleSellerProfile() {
+    console.log("Seller ID:", seller?.id);
     navigate(`/seller/${seller?.id || "sellerdz"}`);
   }
+  console.log("SELLER:", seller);
 
   return (
     <main className="results-page" dir="rtl">
@@ -54,14 +64,10 @@ export default function Results() {
         <h2>نتائج البحث</h2>
 
         {/* Loading */}
-        {loading && (
-          <div className="results-loading">جاري البحث...</div>
-        )}
+        {loading && <div className="results-loading">جاري البحث...</div>}
 
         {/* Error */}
-        {error && (
-          <div className="results-error">{error}</div>
-        )}
+        {error && <div className="results-error">{error}</div>}
 
         {/* No results */}
         {!loading && result && !result.found && (
@@ -100,32 +106,50 @@ export default function Results() {
             <div className="results-trust-card">
               <TrustScore score={trust?.score} />
               <AiVerdict text={trust?.verdict_narrative} />
-              <PrimaryButton fullWidth variant="green" onClick={handleSellerProfile}>
+              <PrimaryButton
+                fullWidth
+                variant="green"
+                onClick={handleSellerProfile}
+              >
                 <FiEye /> عرض الملف الكامل للبائع
               </PrimaryButton>
             </div>
           </>
         )}
 
-        <div className="results-report-card" onClick={() => navigate("/report")}>
-          <div className="report-icon-small"><FiAlertTriangle size={20} /></div>
+        <div
+          className="results-report-card"
+          onClick={() => navigate("/report")}
+        >
+          <div className="report-icon-small">
+            <FiAlertTriangle size={20} />
+          </div>
           <div>
             <p className="report-title">إبلاغ عن بائع</p>
-            <p className="report-sub">ساعد المجتمع بالإبلاغ عن البائعين النصابين</p>
+            <p className="report-sub">
+              ساعد المجتمع بالإبلاغ عن البائعين النصابين
+            </p>
           </div>
         </div>
 
         <h2>أدوات أخرى</h2>
         <div className="results-tools">
           <div className="tool-card-small" onClick={() => navigate("/analyze")}>
-            <div className="tool-icon-small"><FiImage size={18} /></div>
+            <div className="tool-icon-small">
+              <FiImage size={18} />
+            </div>
             <div>
               <p className="tool-title">تحليل الصور</p>
               <p className="tool-sub">ارفع صورة محادثة أو إعلان</p>
             </div>
           </div>
-          <div className="tool-card-small" onClick={() => navigate("/text-analyze")}>
-            <div className="tool-icon-small"><FiFileText size={18} /></div>
+          <div
+            className="tool-card-small"
+            onClick={() => navigate("/text-analyze")}
+          >
+            <div className="tool-icon-small">
+              <FiFileText size={18} />
+            </div>
             <div>
               <p className="tool-title">تحليل النصوص</p>
               <p className="tool-sub">ألصق أي محادثة أو إعلان</p>

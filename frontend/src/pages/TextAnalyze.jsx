@@ -23,7 +23,10 @@ export default function TextAnalyze() {
   }
 
   async function handleAnalyze() {
-    if (!image) { setError("يرجى رفع صورة أولاً"); return; }
+    if (!image) {
+      setError("يرجى رفع صورة أولاً");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -39,7 +42,10 @@ export default function TextAnalyze() {
   return (
     <main className="analyze-page" dir="rtl">
       <div className="analyze-header">
-        <div className="analyze-header-icon" style={{ background: "#f0f4ff", color: "#122040" }}>
+        <div
+          className="analyze-header-icon"
+          style={{ background: "#f0f4ff", color: "#122040" }}
+        >
           <FiSearch size={28} />
         </div>
         <h1>تحليل النصوص والرسائل</h1>
@@ -56,7 +62,9 @@ export default function TextAnalyze() {
           hint="صورة محادثة من واتساب، إنستغرام، أو أي منصة"
         />
         <div className="how-it-works">
-          <p><strong>كيف يعمل:</strong></p>
+          <p>
+            <strong>كيف يعمل:</strong>
+          </p>
           <p>١. استخراج النص من الصورة</p>
           <p>٢. تحليل النص بحثاً عن أنماط النصب</p>
         </div>
@@ -66,23 +74,56 @@ export default function TextAnalyze() {
         </PrimaryButton>
       </div>
 
-      {result ? (
+      {result && (
         <div className="analyze-results">
+          {/* Extracted Text */}
           {result.extracted_text && (
             <div className="analyze-extracted">
               <p className="analyze-extracted-label">النص المستخرج:</p>
               <p className="analyze-extracted-text">{result.extracted_text}</p>
             </div>
           )}
-          {result.verdict_narrative && <AiVerdict text={result.verdict_narrative} />}
-          {result.is_scam !== undefined && (
-            <div className={`analyze-verdict ${result.is_scam ? "fake" : "real"}`}>
-              {result.is_scam ? "⚠️ محادثة مشبوهة - احذر من هذا البائع" : "✅ المحادثة تبدو طبيعية"}
-            </div>
+
+          {/* General Info */}
+          <div className="analyze-info">
+            <p>✅ الثقة: {(result.confidence * 100).toFixed(1)}%</p>
+            <p>📝 عدد الكلمات: {result.word_count}</p>
+            <p>🖼️ الصور المعالجة: {result.images_processed}</p>
+            <p>⚠️ الصور الفاشلة: {result.images_failed}</p>
+          </div>
+
+          {/* AI Verdict */}
+          {result.analysis && (
+            <>
+              <AiVerdict text={result.analysis.verdict_darija} />
+
+              <div
+                className={`analyze-verdict ${result.analysis.safe_to_proceed ? "real" : "fake"}`}
+              >
+                {result.analysis.safe_to_proceed
+                  ? "✅ المحادثة تبدو طبيعية"
+                  : "⚠️ محادثة مشبوهة - احذر من هذا البائع"}
+              </div>
+
+              {/* Scam type */}
+              {result.analysis.scam_type && (
+                <p>نوع النصب: {result.analysis.scam_type}</p>
+              )}
+
+              {/* Red Flags */}
+              {result.analysis.red_flags.length > 0 && (
+                <div className="analyze-red-flags">
+                  <p>⚠️ علامات تحذيرية:</p>
+                  <ul>
+                    {result.analysis.red_flags.map((flag, i) => (
+                      <li key={i}>{flag}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
         </div>
-      ) : (
-        !loading && <ResultsPlaceholder message='ارفع صورة واضغط "تحليل" لرؤية النتائج' />
       )}
     </main>
   );

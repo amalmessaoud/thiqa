@@ -30,7 +30,7 @@ export const thiqaApi = {
 
   analyzeScreenshot: (file) => {
     const form = new FormData();
-    form.append("screenshot", file);
+    form.append("screenshots", file);
     return api.post("/analyze/screenshot/", form).then((r) => r.data);
   },
 
@@ -41,16 +41,24 @@ export const thiqaApi = {
   },
 
   // Reports
-  submitReport: ({ profile_url, scam_type, description, screenshot, contacts }) => {
+  submitReport: ({
+    profile_url,
+    scam_type,
+    description,
+    screenshot,
+    contacts,
+  }) => {
     const form = new FormData();
     form.append("profile_url", profile_url);
     form.append("scam_type", scam_type);
     if (description) form.append("description", description);
     if (screenshot) form.append("screenshot", screenshot);
     if (contacts) form.append("contacts", JSON.stringify(contacts));
-    return api.post("/reports/", form, {
-      headers: { "Content-Type": "multipart/form-data" }
-    }).then((r) => r.data);
+    return api
+      .post("/reports/", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
   },
 
   getReports: (seller_id) =>
@@ -68,4 +76,8 @@ export const thiqaApi = {
 
   // History
   getHistory: () => api.get("/history/").then((r) => r.data),
+
+  // Get user history by user_id
+  getUserHistory: (userId) =>
+    api.get(`/history/user/${userId}`).then((r) => r.data),
 };

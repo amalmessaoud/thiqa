@@ -22,7 +22,10 @@ export default function Auth() {
   const navigate = useNavigate();
 
   async function handleLogin() {
-    if (!email || !password) { setError("يرجى ملء جميع الحقول"); return; }
+    if (!email || !password) {
+      setError("يرجى ملء جميع الحقول");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -37,18 +40,34 @@ export default function Auth() {
 
   async function handleRegister() {
     if (!firstName || !lastName || !email || !password) {
-      setError("يرجى ملء جميع الحقول"); return;
+      setError("يرجى ملء جميع الحقول");
+      return;
     }
+
     if (password !== confirmPassword) {
-      setError("كلمتا المرور غير متطابقتين"); return;
+      setError("كلمتا المرور غير متطابقتين");
+      return;
     }
+
+    if (password.length < 6) {
+      setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+      return;
+    }
+
     setError("");
     setLoading(true);
+
     try {
       await register(firstName, lastName, email, password);
       navigate("/");
     } catch (e) {
-      setError("حدث خطأ أثناء إنشاء الحساب، حاول مرة أخرى");
+      // Check if backend returned validation errors
+      if (e?.response?.data?.detail && Array.isArray(e.response.data.detail)) {
+        // Take first error message from backend
+        setError(e.response.data.detail[0].msg || "حدث خطأ أثناء إنشاء الحساب");
+      } else {
+        setError("حدث خطأ أثناء إنشاء الحساب، حاول مرة أخرى");
+      }
     } finally {
       setLoading(false);
     }
@@ -101,7 +120,14 @@ export default function Auth() {
             </PrimaryButton>
             <p className="auth-switch">
               ليس لديك حساب؟{" "}
-              <span onClick={() => { setIsLogin(false); setError(""); }}>إنشاء حساب</span>
+              <span
+                onClick={() => {
+                  setIsLogin(false);
+                  setError("");
+                }}
+              >
+                إنشاء حساب
+              </span>
             </p>
           </div>
         ) : (
@@ -169,7 +195,14 @@ export default function Auth() {
             </PrimaryButton>
             <p className="auth-switch">
               لديك حساب بالفعل؟{" "}
-              <span onClick={() => { setIsLogin(true); setError(""); }}>تسجيل الدخول</span>
+              <span
+                onClick={() => {
+                  setIsLogin(true);
+                  setError("");
+                }}
+              >
+                تسجيل الدخول
+              </span>
             </p>
           </div>
         )}
